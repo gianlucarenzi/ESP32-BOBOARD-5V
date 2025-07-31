@@ -7,6 +7,167 @@
 #include "freertos/queue.h"
 #include <pbi-driver.h> // Include PBI driver memory space
 
+/* ANSI Eye-Candy ;-) */
+#define ANSI_RED    "\x1b[31m"
+#define ANSI_GREEN  "\x1b[32m"
+#define ANSI_YELLOW "\x1b[1;33m"
+#define ANSI_BLUE   "\x1b[1;34m"
+#define ANSI_RESET  "\x1b[0m"
+
+#define TEST
+
+#ifdef TEST
+// Lista dei pin GPIO da testare sull'ESP32 NodeMCU DEVKIT V1
+// Esclusi: GPIO1 (TX0), GPIO3 (RX0), e i pin SPI Flash (6-11).
+// I pin 0, 2, 12, 15 sono inclusi ma usali con cautela come OUTPUT a causa delle loro funzioni di boot.
+// I pin 34, 35, 36, 39 sono SOLO INPUT, quindi saranno testati solo come input.
+const int testablePins[] = {
+	0,  // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
+	2,  // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
+	4,
+	5,
+	12, // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
+	13,
+	14,
+	15, // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
+	16,
+	17,
+	18,
+	19,
+	21,
+	22,
+	23,
+	25,
+	26,
+	27,
+	32,
+	33,
+	// I seguenti pin sono SOLO INPUT e verranno testati solo in quella modalità
+	34,
+	35,
+	36,
+	39
+};
+
+const int numPins = sizeof(testablePins) / sizeof(testablePins[0]);
+
+void setup(void)
+{
+	Serial.begin(115200); // Inizializza la comunicazione seriale
+	while (!Serial);      // Attendi che la porta seriale sia disponibile
+
+	Serial.println(ANSI_BLUE   "  Avvio test GPIO sequenziale ESP32...  " ANSI_RESET);
+	Serial.println(ANSI_YELLOW "Segui le istruzioni nel Monitor Seriale." ANSI_RESET);
+	Serial.println(ANSI_GREEN  "----------------------------------------" ANSI_RESET);
+}
+
+void loop(void)
+{
+	for (int i = 0; i < numPins; i++)
+	{
+		int currentPin = testablePins[i];
+
+		Serial.print(ANSI_RED "Testing GPIO");
+		Serial.println(currentPin);
+		Serial.print(ANSI_RESET);
+
+		// --- Test come OUTPUT ---
+		// Verifica se il pin può essere usato come output (i pin 34,35,36,39 sono solo input)
+		if (currentPin < 34 || currentPin == 0 || currentPin == 2 || currentPin == 4 || currentPin == 5 ||
+			currentPin == 12 || currentPin == 13 || currentPin == 14 || currentPin == 15 || currentPin == 16 ||
+			currentPin == 17 || currentPin == 18 || currentPin == 19 || currentPin == 21 || currentPin == 22 ||
+			currentPin == 23 || currentPin == 25 || currentPin == 26 || currentPin == 27 || currentPin == 32 || currentPin == 33)
+		{
+
+			Serial.print(ANSI_YELLOW "  -> Test come OUTPUT: Collega un LED (con resistenza) tra GPIO");
+			Serial.print(currentPin);
+			Serial.println(" e GND.");
+			Serial.println("     Il LED lampeggerà 3 volte." ANSI_RESET);
+
+			pinMode(currentPin, OUTPUT);
+			for (int j = 0; j < 3; j++)
+			{
+				digitalWrite(currentPin, HIGH); // Accendi
+				Serial.println(ANSI_BLUE "     LED HIGH");
+				delay(500);
+				digitalWrite(currentPin, LOW);  // Spegni
+				Serial.println("     LED LOW" ANSI_RESET);
+				delay(500);
+			}
+			Serial.println(ANSI_RED "  Output test completato per questo pin." ANSI_RESET);
+			// Dopo il test di output, riporta il pin a stato neutro (input) per evitare interferenze
+			pinMode(currentPin, INPUT);
+
+			Serial.println(ANSI_GREEN "     Premi <ENTER> nel Monitor Seriale per proseguire." ANSI_RESET);
+
+			for(;;)
+			{
+				if (Serial.available() > 0)
+				{
+					char incomingByte = Serial.read();
+					break;
+				}
+			}
+			delay(500); // Breve pausa
+		}
+		else
+		{
+			Serial.println(ANSI_GREEN "  -> Questo pin (GPIO" + String(currentPin) + ") è SOLO INPUT, saltando il test OUTPUT." ANSI_RESET);
+		}
+
+		// --- Test come INPUT ---
+		Serial.print(ANSI_YELLOW "  -> Test come INPUT: Collega GPIO");
+		Serial.print(currentPin);
+		Serial.println(" a GND per vederlo cambiare stato.");
+		Serial.println("     Premi 's' nel Monitor Seriale e invia per saltare il test corrente.");
+		Serial.println("     Hai 60 secondi per testare l'input." ANSI_RESET);
+
+		pinMode(currentPin, INPUT_PULLUP); // Configura come input con pull-up interno
+
+		unsigned long startTime = millis();
+		bool inputTested = false;
+		while (millis() - startTime < 60000 && !inputTested)
+		{
+			// Attendi per 60 secondi o finché non testato
+			if (Serial.available() > 0)
+			{
+				char incomingByte = Serial.read();
+				if (incomingByte == 's' || incomingByte == 'S')
+				{
+					Serial.println(ANSI_RED "     Input test saltato." ANSI_RESET);
+					inputTested = true;
+				}
+			}
+
+			int inputState = digitalRead(currentPin);
+			if (inputState == LOW)
+			{
+				Serial.println(ANSI_BLUE "     GPIO" + String(currentPin) + " è LOW. Ingresso funzionante! Rilascia il collegamento." ANSI_RESET);
+				inputTested = true; // Input rilevato, esci dal ciclo di attesa
+				delay(1000); // Dai tempo per rilasciare
+			}
+			delay(100); // Breve pausa per non sovraccaricare la seriale
+		}
+
+		if (!inputTested)
+		{
+			Serial.println(ANSI_RED "     Tempo scaduto o nessuna lettura LOW per GPIO" + String(currentPin) + ". Verificare il collegamento." ANSI_RESET);
+		}
+		else
+		{
+			Serial.println(ANSI_GREEN "  Input test completato per questo pin." ANSI_RESET);
+		}
+
+		Serial.println(ANSI_BLUE "---------------------------------------" ANSI_RESET);
+		delay(2000); // Pausa tra un pin e l'altro
+	}
+
+	Serial.println(ANSI_GREEN "Tutti i pin nella lista sono stati testati una volta.");
+	Serial.println("Riavvio il test in 5 secondi..." ANSI_RESET);
+	delay(5000); // Pausa prima di ricominciare il ciclo completo
+}
+#else
+// NON TEST
 #define SERIAL_QUEUE_LENGTH 32 // Length of the serial queue
 #define SERIAL_MSG_SIZE 128 // Size of the serial message buffer
 
@@ -84,13 +245,6 @@ static uint8_t d500[256] = {0}; // CCTL memory space
 static uint8_t cardselected = 0; // Flag to indicate if a card is selected
 static uint8_t DEVICE_ID = 0x01; // Example device ID for PBI I/O
 extern const uint8_t pbi_driver[]; // PBI driver memory space
-
-/* ANSI Eye-Candy ;-) */
-#define ANSI_RED    "\x1b[31m"
-#define ANSI_GREEN  "\x1b[32m"
-#define ANSI_YELLOW "\x1b[1;33m"
-#define ANSI_BLUE   "\x1b[1;34m"
-#define ANSI_RESET  "\x1b[0m"
 
 #define DBG_ERROR   0
 #define DBG_INFO    1
@@ -428,3 +582,4 @@ void loop(void)
 	last_phi2 = current_phi2;
 	delayMicroseconds(5);
 }
+#endif
