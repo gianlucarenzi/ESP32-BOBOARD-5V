@@ -20,8 +20,12 @@
 #ifdef TEST
 // Definizione delle coppie di pin da testare: { Pin_Output, Pin_Input }
 // Assicurati di collegare fisicamente questi pin tra loro con un cavo jumper.
-// I pin sul lato destro (Input) verranno testati leggendo il valore scritto sul pin di sinistra (Output).
-// Attenzione: i pin 34, 35, 36, 39 sono solo INPUT. Il loro partner sul lato sinistro DEVE essere un pin configurabile come OUTPUT.
+// I pin sul lato destro (Input) verranno testati leggendo il valore
+// scritto sul pin di sinistra (Output).
+
+// Attenzione: i pin 34, 35, 36, 39 sono solo INPUT. Il loro partner sul
+// lato sinistro DEVE essere un pin configurabile come OUTPUT.
+
 const int testPairs[][2] = {
 	{2, 4},   // D2, D4
 	{5, 12},  // D5, D12
