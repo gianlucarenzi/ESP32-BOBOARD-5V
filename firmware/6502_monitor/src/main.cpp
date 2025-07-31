@@ -15,6 +15,7 @@
 #define ANSI_RESET  "\x1b[0m"
 
 #define TEST
+#undef TEST
 
 #ifdef TEST
 // Definizione delle coppie di pin da testare: { Pin_Output, Pin_Input }
