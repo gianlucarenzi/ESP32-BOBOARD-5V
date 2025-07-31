@@ -17,154 +17,144 @@
 #define TEST
 
 #ifdef TEST
-// Lista dei pin GPIO da testare sull'ESP32 NodeMCU DEVKIT V1
-// Esclusi: GPIO1 (TX0), GPIO3 (RX0), e i pin SPI Flash (6-11).
-// I pin 0, 2, 12, 15 sono inclusi ma usali con cautela come OUTPUT a causa delle loro funzioni di boot.
-// I pin 34, 35, 36, 39 sono SOLO INPUT, quindi saranno testati solo come input.
-const int testablePins[] = {
-	0,  // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
-	2,  // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
-	4,
-	5,
-	12, // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
-	13,
-	14,
-	15, // Attenzione: usato per boot mode, può causare problemi come output all'avvio.
-	16,
-	17,
-	18,
-	19,
-	21,
-	22,
-	23,
-	25,
-	26,
-	27,
-	32,
-	33,
-	// I seguenti pin sono SOLO INPUT e verranno testati solo in quella modalità
-	34,
-	35,
-	36,
-	39
+// Definizione delle coppie di pin da testare: { Pin_Output, Pin_Input }
+// Assicurati di collegare fisicamente questi pin tra loro con un cavo jumper.
+// I pin sul lato destro (Input) verranno testati leggendo il valore scritto sul pin di sinistra (Output).
+// Attenzione: i pin 34, 35, 36, 39 sono solo INPUT. Il loro partner sul lato sinistro DEVE essere un pin configurabile come OUTPUT.
+const int testPairs[][2] = {
+	{2, 4},   // D2, D4
+	{5, 12},  // D5, D12
+	{13, 14}, // D13, D14
+	{15, 18}, // D15, D18
+	{19, 21}, // D19, D21
+	{22, 23}, // D22, D23
+	{25, 26}, // D25, D26
+	{27, 32}, // D27, D32
+	{33, 34}, // D33, D34 (D34 è solo INPUT)
+	{17, 35}, // TX2, D35 (D35 è solo INPUT)
+	{16, 39}  // RX2, VN (VN/GPIO39 è solo INPUT)
 };
 
-const int numPins = sizeof(testablePins) / sizeof(testablePins[0]);
+const int numPairs = sizeof(testPairs) / sizeof(testPairs[0]);
+
+// Funzione per verificare se un pin è solo input
+bool isOnlyInputPin(int pin)
+{
+	return (pin == 34 || pin == 35 || pin == 36 || pin == 39);
+}
 
 void setup(void)
 {
 	Serial.begin(115200); // Inizializza la comunicazione seriale
 	while (!Serial);      // Attendi che la porta seriale sia disponibile
 
-	Serial.println(ANSI_BLUE   "  Avvio test GPIO sequenziale ESP32...  " ANSI_RESET);
-	Serial.println(ANSI_YELLOW "Segui le istruzioni nel Monitor Seriale." ANSI_RESET);
-	Serial.println(ANSI_GREEN  "----------------------------------------" ANSI_RESET);
+	Serial.println(ANSI_BLUE "--- Avvio Test Automatico GPIO ESP32 ---" ANSI_RESET);
+	Serial.println(ANSI_YELLOW "Assicurati che i pin siano fisicamente collegati a coppie come definito nel codice.");
+	Serial.println("-----------------------------------------------------------------------------------" ANSI_RESET);
+	Serial.println("Configurazione delle coppie:");
+	for (int i = 0; i < numPairs; i++)
+	{
+		Serial.print(ANSI_YELLOW "  Pair "); Serial.print(i + 1); Serial.print(": Output GPIO"); Serial.print(testPairs[i][0]);
+		Serial.print(" <-> Input GPIO" ANSI_RESET); Serial.println(testPairs[i][1]);
+	}
+	Serial.println("---------------------------------------");
+	delay(2000); // Breve pausa prima di iniziare i test
 }
 
 void loop(void)
 {
-	for (int i = 0; i < numPins; i++)
+	static unsigned long lastTestTime = 0;
+	const unsigned long testInterval = 5000; // Intervallo tra cicli di test completi (5 secondi)
+
+	if (millis() - lastTestTime >= testInterval)
 	{
-		int currentPin = testablePins[i];
+		lastTestTime = millis();
+		Serial.println(ANSI_BLUE "\n--- Inizio un nuovo ciclo di test ---" ANSI_RESET);
+		int failedTests = 0;
 
-		Serial.print(ANSI_RED "Testing GPIO");
-		Serial.println(currentPin);
-		Serial.print(ANSI_RESET);
-
-		// --- Test come OUTPUT ---
-		// Verifica se il pin può essere usato come output (i pin 34,35,36,39 sono solo input)
-		if (currentPin < 34 || currentPin == 0 || currentPin == 2 || currentPin == 4 || currentPin == 5 ||
-			currentPin == 12 || currentPin == 13 || currentPin == 14 || currentPin == 15 || currentPin == 16 ||
-			currentPin == 17 || currentPin == 18 || currentPin == 19 || currentPin == 21 || currentPin == 22 ||
-			currentPin == 23 || currentPin == 25 || currentPin == 26 || currentPin == 27 || currentPin == 32 || currentPin == 33)
+		for (int i = 0; i < numPairs; i++)
 		{
+			int outputPin = testPairs[i][0];
+			int inputPin = testPairs[i][1];
 
-			Serial.print(ANSI_YELLOW "  -> Test come OUTPUT: Collega un LED (con resistenza) tra GPIO");
-			Serial.print(currentPin);
-			Serial.println(" e GND.");
-			Serial.println("     Il LED lampeggerà 3 volte." ANSI_RESET);
+			Serial.print(ANSI_YELLOW "Testing Pair: Output GPIO");
+			Serial.print(outputPin);
+			Serial.print(" <-> Input GPIO");
+			Serial.print(inputPin);
+			Serial.print(" -- " ANSI_RESET);
 
-			pinMode(currentPin, OUTPUT);
-			for (int j = 0; j < 3; j++)
+			// Salta il test di output se il pin di output è un pin solo input (errore di configurazione)
+			if (isOnlyInputPin(outputPin))
 			{
-				digitalWrite(currentPin, HIGH); // Accendi
-				Serial.println(ANSI_BLUE "     LED HIGH");
-				delay(500);
-				digitalWrite(currentPin, LOW);  // Spegni
-				Serial.println("     LED LOW" ANSI_RESET);
-				delay(500);
+				Serial.println(ANSI_RED "ERRORE: Pin " + String(outputPin) + " (Output) è un pin SOLO INPUT. Questa coppia non può funzionare come previsto." ANSI_RESET);
+				failedTests++;
+				continue; // Passa alla prossima coppia
 			}
-			Serial.println(ANSI_RED "  Output test completato per questo pin." ANSI_RESET);
-			// Dopo il test di output, riporta il pin a stato neutro (input) per evitare interferenze
-			pinMode(currentPin, INPUT);
 
-			Serial.println(ANSI_GREEN "     Premi <ENTER> nel Monitor Seriale per proseguire." ANSI_RESET);
+			// Configura i pin
+			pinMode(outputPin, OUTPUT);
+			pinMode(inputPin, INPUT); // Non usiamo PULLUP qui perché il pin è pilotato attivamente
 
-			for(;;)
+			bool pairFailed = false;
+
+			// --- Test HIGH ---
+			digitalWrite(outputPin, HIGH);
+			delay(10); // Breve ritardo per stabilizzare il segnale
+			int readStateHigh = digitalRead(inputPin);
+
+			if (readStateHigh == HIGH)
 			{
-				if (Serial.available() > 0)
-				{
-					char incomingByte = Serial.read();
-					break;
-				}
+				//Serial.println(ANSI_GREEN "HIGH Test: PASS" ANSI_RESET); // Troppo verboso, solo in caso di fallimento
 			}
-			delay(500); // Breve pausa
+			else
+			{
+				Serial.println(ANSI_RED "FAIL (HIGH Test): Expected HIGH on GPIO" + String(inputPin) + ", but got LOW." ANSI_RESET);
+				pairFailed = true;
+			}
+
+			// --- Test LOW ---
+			digitalWrite(outputPin, LOW);
+			delay(10); // Breve ritardo per stabilizzare il segnale
+			int readStateLow = digitalRead(inputPin);
+
+			if (readStateLow == LOW)
+			{
+				//Serial.println(ANSI_GREEN "LOW Test: PASS" ANSI_RESET); // Troppo verboso, solo in caso di fallimento
+			}
+			else
+			{
+				Serial.println(ANSI_RED "FAIL (LOW Test): Expected LOW on GPIO" + String(inputPin) + ", but got HIGH." ANSI_RESET);
+				pairFailed = true;
+			}
+
+			if (!pairFailed)
+			{
+				Serial.println(ANSI_GREEN "PASS." ANSI_RESET);
+			}
+			else
+			{
+				failedTests++;
+			}
+
+			// Disabilita i pin per la prossima iterazione, o mettili in uno stato neutro
+			// pinMode(outputPin, INPUT); // Rimettere come input previene consumi o conflitti futuri
+			// pinMode(inputPin, INPUT);
+		}
+
+		Serial.println(ANSI_BLUE "--- Ciclo di test completato ---" ANSI_RESET);
+		if (failedTests == 0)
+		{
+			Serial.println(ANSI_GREEN "Tutti i test delle coppie sono PASSATI!" ANSI_RESET);
 		}
 		else
 		{
-			Serial.println(ANSI_GREEN "  -> Questo pin (GPIO" + String(currentPin) + ") è SOLO INPUT, saltando il test OUTPUT." ANSI_RESET);
+			Serial.print(ANSI_RED "Numero di test FALLITI: ");
+			Serial.println(failedTests);
+			Serial.println("Verifica i collegamenti o i pin indicati come falliti." ANSI_RESET);
 		}
 
-		// --- Test come INPUT ---
-		Serial.print(ANSI_YELLOW "  -> Test come INPUT: Collega GPIO");
-		Serial.print(currentPin);
-		Serial.println(" a GND per vederlo cambiare stato.");
-		Serial.println("     Premi 's' nel Monitor Seriale e invia per saltare il test corrente.");
-		Serial.println("     Hai 60 secondi per testare l'input." ANSI_RESET);
-
-		pinMode(currentPin, INPUT_PULLUP); // Configura come input con pull-up interno
-
-		unsigned long startTime = millis();
-		bool inputTested = false;
-		while (millis() - startTime < 60000 && !inputTested)
-		{
-			// Attendi per 60 secondi o finché non testato
-			if (Serial.available() > 0)
-			{
-				char incomingByte = Serial.read();
-				if (incomingByte == 's' || incomingByte == 'S')
-				{
-					Serial.println(ANSI_RED "     Input test saltato." ANSI_RESET);
-					inputTested = true;
-				}
-			}
-
-			int inputState = digitalRead(currentPin);
-			if (inputState == LOW)
-			{
-				Serial.println(ANSI_BLUE "     GPIO" + String(currentPin) + " è LOW. Ingresso funzionante! Rilascia il collegamento." ANSI_RESET);
-				inputTested = true; // Input rilevato, esci dal ciclo di attesa
-				delay(1000); // Dai tempo per rilasciare
-			}
-			delay(100); // Breve pausa per non sovraccaricare la seriale
-		}
-
-		if (!inputTested)
-		{
-			Serial.println(ANSI_RED "     Tempo scaduto o nessuna lettura LOW per GPIO" + String(currentPin) + ". Verificare il collegamento." ANSI_RESET);
-		}
-		else
-		{
-			Serial.println(ANSI_GREEN "  Input test completato per questo pin." ANSI_RESET);
-		}
-
-		Serial.println(ANSI_BLUE "---------------------------------------" ANSI_RESET);
-		delay(2000); // Pausa tra un pin e l'altro
+		Serial.println(ANSI_YELLOW "Prossimo test tra " + String(testInterval / 1000) + " secondi." ANSI_RESET);
 	}
-
-	Serial.println(ANSI_GREEN "Tutti i pin nella lista sono stati testati una volta.");
-	Serial.println("Riavvio il test in 5 secondi..." ANSI_RESET);
-	delay(5000); // Pausa prima di ricominciare il ciclo completo
 }
 #else
 // NON TEST
