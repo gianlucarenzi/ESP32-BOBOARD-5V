@@ -227,14 +227,11 @@ constexpr gpio_num_t PIN_D7 = GPIO_NUM_22;	// D22
 
 constexpr gpio_num_t PIN_CS = GPIO_NUM_26;	// D26 Chip Select Pin for FPGA VERA VIDEO CARD
 
-// Stringa e buffer
-const char MEMORY_STR[] = "6502 MEMORY";
-const size_t MEMORY_STR_LEN = sizeof(MEMORY_STR) - 1;
+// Shadow RAM PBI Driver Memory Space
+static char ram_d800[2048] = {0};
 
-#define BUFFER_SIZE 32
-uint8_t writeBuffer[BUFFER_SIZE] = {0};
-size_t writeIndex = 0;
-uint8_t strIndex = 0;
+// Shadow RAM 256 Bytes
+static char ram_d600[256] = {0};
 
 static uint8_t d500[256] = {0}; // CCTL memory space
 static uint8_t cardselected = 0; // Flag to indicate if a card is selected
@@ -250,10 +247,16 @@ static int debuglevel = DBG_INFO;
 
 QueueHandle_t serialQueue;
 
+// Prototypes for functions
+void SerialTask(void *pvParameters);
+void MonitorTask(void *pvParameters);
+
 // This task will run on the second (1) core of the ESP32
 void SerialTask(void *pvParameters)
 {
 	char msg[SERIAL_MSG_SIZE];
+	Serial.println(ANSI_BLUE "Serial Task Started on Core 0" ANSI_RESET);
+
 	while (true)
 	{
 		if (xQueueReceive(serialQueue, msg, portMAX_DELAY) == pdTRUE)
@@ -375,21 +378,13 @@ void write_data_bus(uint8_t value)
 	}
 }
 
-void dump_buffer(void)
-{
-	Serial.println("\nBuffer Dump:");
-	for(size_t i = 0; i < BUFFER_SIZE; i++)
-	{
-		Serial.printf("%02X%s", writeBuffer[i], (i % 16 == 15) ? "\n" : " ");
-	}
-}
-
 void setup(void)
 {
 	Serial.begin(115200);
 
-    serialQueue = xQueueCreate(SERIAL_QUEUE_LENGTH, SERIAL_MSG_SIZE);
-    xTaskCreatePinnedToCore(SerialTask, "SerialTask", 2048, NULL, 1, NULL, 1);
+	serialQueue = xQueueCreate(SERIAL_QUEUE_LENGTH, SERIAL_MSG_SIZE);
+	xTaskCreatePinnedToCore(SerialTask, "SerialTask", 2048, NULL, 1, NULL, 0); // Create the serial task on core 0
+	xTaskCreatePinnedToCore(MonitorTask, "MonitorTask", 2048, NULL, 1, NULL, 1); // Create the monitor task on core 1
 
 	// Configurazione pin
 	gpio_config_t io_conf = {};
@@ -410,7 +405,7 @@ void setup(void)
 	io_conf.mode = GPIO_MODE_INPUT;
 	gpio_config(&io_conf);
 
-	// Configurazione pin dati come input
+	// Configurazione pin dati come input/output (per ora come input)
 	io_conf.pin_bit_mask = (1ULL << PIN_D0) | (1ULL << PIN_D1) | (1ULL << PIN_D2) |
 						   (1ULL << PIN_D3) | (1ULL << PIN_D4) | (1ULL << PIN_D5) |
 						   (1ULL << PIN_D6) | (1ULL << PIN_D7);
@@ -428,20 +423,21 @@ void setup(void)
 	gpio_set_direction(PIN_CS, GPIO_MODE_OUTPUT);
 	gpio_set_level(PIN_CS, 1);
 
-	serialPrintQueue(ANSI_BLUE ">> 6502 Bus Monitor Ready\n" ANSI_RESET);
 }
 
-void loop(void)
+void MonitorTask(void *pvParameters)
 {
-	static bool last_phi2 = false;
-	bool current_phi2 = read_gpio_level(PIN_PHI2);
+	serialPrintQueue(ANSI_BLUE "6502 Bus Monitor Ready on Core 1\n" ANSI_RESET);
 
-	// Rising edge of PHI2
-	if(current_phi2 && !last_phi2)
+	for (;;)
 	{
+		// Rising edge of PHI2
+		while (! read_gpio_level(PIN_PHI2))
+			;;
+
 		uint16_t address = read_address_bus();
 		bool rw = read_gpio_level(PIN_RW);
-		
+			
 		// CCTL
 		if(address >= 0xD500 && address <= 0xD5FF)
 		{
@@ -454,6 +450,12 @@ void loop(void)
 				uint8_t data = d500[address & 0x00FF];
 				set_data_bus_output();
 				write_data_bus(data);
+
+				// wait for PHI2 low
+				while ( read_gpio_level(PIN_PHI2) )
+					;;
+				set_data_bus_input();
+
 				serialPrintQueue(ANSI_YELLOW "CCTL: Send %02X from %04X to CPU\n" ANSI_RESET, data, address);
 			}
 			else
@@ -467,17 +469,17 @@ void loop(void)
 		}
 		else
 		{
-			#if PROTOTYPE == 0
-				gpio_set_level(PIN_CCTL, 1); // Set CCTL high for normal operation
-			#endif
+		#if PROTOTYPE == 0
+			gpio_set_level(PIN_CCTL, 1); // Set CCTL high for normal operation
+		#endif
 		}
 
 		// Gestione PBI I/O
 		if(address >= 0xD100 && address <= 0xD1FF)
 		{
-			#if PROTOTYPE == 0
-				gpio_set_level(PIN_D1XX, 0); // Set D1XX low to indicate access to PBI I/O memory space
-			#endif 
+		#if PROTOTYPE == 0
+			gpio_set_level(PIN_D1XX, 0); // Set D1XX low to indicate access to PBI I/O memory space
+		#endif 
 			if (address == 0xD1FF)
 			{
 				// 6502 CPU writes to PBI I/O to select device
@@ -503,6 +505,12 @@ void loop(void)
 					uint8_t data = cardselected ? DEVICE_ID : 0; // Return DEVICE_ID if device is selected, otherwise 0
 					set_data_bus_output();
 					write_data_bus(data);
+
+					// wait for PHI2 low
+					while ( read_gpio_level(PIN_PHI2) )
+						;;
+					set_data_bus_input();
+
 					serialPrintQueue(ANSI_GREEN "PBI I/O: Sent %02X to CPU\n" ANSI_RESET, data);
 				}
 			}
@@ -527,12 +535,16 @@ void loop(void)
 					serialPrintQueue(ANSI_RED "PBI Read or Write @ %04X address. Device must be selected first!\n" ANSI_RESET, address);
 				}
 			}
+			// Restore PIN_D1XX selection
+		#if PROTOTYPE == 0
+			gpio_set_level(PIN_D1XX, 1); // Set D1XX high for normal operation
+		#endif
 		}
 		else
 		{
-			#if PROTOTYPE == 0
-				gpio_set_level(PIN_D1XX, 1); // Set D1XX high for normal operation
-			#endif
+		#if PROTOTYPE == 0
+			gpio_set_level(PIN_D1XX, 1); // Set D1XX high for normal operation
+		#endif
 		}
 
 		// Gestione EXSEL e MPD
@@ -540,41 +552,122 @@ void loop(void)
 		{
 			if (cardselected)
 			{
+			#if PROTOTYPE == 0 
+				gpio_set_level(PIN_MPD, 0); // Set MPD low to indicate Math Pack ROM Disable
+				//gpio_set_level(PIN_EXSEL, 0); // Set EXSEL low for external memory
+			#endif
 				// ROM (READ ONLY)
 				if (rw)
 				{
 					// D800-DFFF: CPU read from PBI Driver and lower MPD
 					uint8_t data = pbi_driver[ address - 0xD800 ];
-					#if PROTOTYPE == 0 
-						gpio_set_level(PIN_MPD, 0); // Set MPD low to indicate Math Pack ROM Disable
-						gpio_set_level(PIN_EXSEL, 0); // Set EXSEL low for external memory
-					#endif
 					serialPrintQueue(ANSI_YELLOW "EXSEL: Set to external memory, MPD: Disabled" ANSI_RESET);
 					set_data_bus_output();
 					write_data_bus(data);
+
+					// wait for PHI2 low
+					while ( read_gpio_level(PIN_PHI2) )
+						;;
+					set_data_bus_input();
+
 					serialPrintQueue(ANSI_YELLOW "PBI ROM Driver: Sent %02X from %04X to CPU\n" ANSI_RESET, data, address);
 				}
 				else
 				{
 					// D800-DFFF: CPU try to writes to PBI Driver?
+				#if PROTOTYPE == 0 
+					//gpio_set_level(PIN_MPD, 0); // Set MPD low to indicate Math Pack ROM Disable
+					gpio_set_level(PIN_EXSEL, 0); // Set EXSEL low for external memory
+				#endif
 					serialPrintQueue(ANSI_RED "OSROM Driver: Why Write to ROM? %04X\n" ANSI_RESET, address);
+					uint8_t data = read_data_bus();
+					// Store the data in the shadow RAM
+					ram_d800[address - 0xD800] = data;
+					serialPrintQueue(ANSI_YELLOW "OSROM Driver: Received %02X to %04X from CPU\n" ANSI_RESET, data, address);
 				}
+
+				// Restore all MPD and EXSEL pins...
+			#if PROTOTYPE == 0
+				gpio_set_level(PIN_MPD, 1); // Set MPD high for normal operation
+				gpio_set_level(PIN_EXSEL, 1); // Set EXSEL high for internal memory
+			#endif
 			}
 			else
 			{
+			#if PROTOTYPE == 0
+				gpio_set_level(PIN_MPD, 1); // Set MPD high for normal operation
+				gpio_set_level(PIN_EXSEL, 1); // Set EXSEL high for internal memory
+			#endif
 				serialPrintQueue(ANSI_BLUE "OSROM: Accessing Math Pack %04X\n" ANSI_RESET, address);
 			}
 		}
 		else
 		{
+		#if PROTOTYPE == 0
+			gpio_set_level(PIN_MPD, 1); // Set MPD high for normal operation
+			gpio_set_level(PIN_EXSEL, 1); // Set EXSEL high for internal memory
+		#endif
+			serialPrintQueue(ANSI_BLUE "OSROM: Accessing Math Pack %04X\n" ANSI_RESET, address);
+		}
+
+		// D600-D7FF Shadow RAM
+		// This is a special area for shadow RAM, used by the 6502 CPU
+		// only if there is a PBI card connected and initialized 
+		if (address >= 0xD600 && address <= 0xD7FF)
+		{
+			// Accessing the Shadow RAM Area D6xx-D7xx only if a device card is
+			// selected by PBI bus protocol
+			if (cardselected)
+			{
 			#if PROTOTYPE == 0
-				gpio_set_level(PIN_MPD, 1); // Set MPD high for normal operation
+				gpio_set_level(PIN_EXSEL, 0); // Set EXSEL low for external memory
+			#endif
+
+				// Shadow RAM D600-D7FF
+				if (rw)
+				{
+					// CPU reads from shadow RAM
+					uint8_t data = ram_d600[address - 0xD600];
+					set_data_bus_output();
+					write_data_bus(data);
+
+					// wait for PHI2 low
+					while ( read_gpio_level(PIN_PHI2) )
+						;;
+					set_data_bus_input();
+
+					serialPrintQueue(ANSI_YELLOW "Shadow RAM: Sent %02X from %04X to CPU\n" ANSI_RESET, data, address);
+				}
+				else
+				{
+					// CPU writes to shadow RAM
+					set_data_bus_input();
+					uint8_t data = read_data_bus();
+					ram_d600[address - 0xD600] = data;
+					serialPrintQueue(ANSI_YELLOW "Shadow RAM: Received %02X to %04X from CPU\n" ANSI_RESET, data, address);
+				}
+
+				// Restore EXSEL pin
+			#if PROTOTYPE == 0
 				gpio_set_level(PIN_EXSEL, 1); // Set EXSEL high for internal memory
 			#endif
+			}
+			else
+			{
+			#if PROTOTYPE == 0
+				gpio_set_level(PIN_EXSEL, 1); // Set EXSEL high for internal memory
+			#endif
+			}
 		}
-	}
 
-	last_phi2 = current_phi2;
-	delayMicroseconds(5);
+		delayMicroseconds(5);
+	} // for(;;)
+}
+
+void loop(void)
+{
+	// Main loop does nothing, all work is done in MonitorTask & SerialTask
+	// This is to keep the main loop responsive and free for other tasks
+	vTaskDelay(pdMS_TO_TICKS(100)); // Yield to other tasks every 100 ms
 }
 #endif
