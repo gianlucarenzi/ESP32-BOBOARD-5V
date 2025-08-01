@@ -1,5 +1,5 @@
 Drill report for /home/gianluca/Progetti-CVS/ATARI/ESP32-BOBOARD-5V/ESP32-BOBOARD-5V.kicad_pcb
-Created on Wed 23 Jul 2025 09:27:40 AM CEST
+Created on Fri 01 Aug 2025 09:18:52 AM CEST
 
 Copper Layer Stackup:
     =============================================================
@@ -13,12 +13,12 @@ Drill file 'ESP32-BOBOARD-5V-PTH.drl' contains
     plated through holes:
     =============================================================
     T1  0.30mm  0.012"  (4 holes)
-    T2  0.40mm  0.016"  (43 holes)
-    T3  0.60mm  0.024"  (35 holes)
+    T2  0.40mm  0.016"  (45 holes)
+    T3  0.60mm  0.024"  (36 holes)
     T4  0.65mm  0.026"  (4 holes)  (with 4 slots)
     T5  1.00mm  0.039"  (30 holes)
 
-    Total plated holes count 116
+    Total plated holes count 119
 
 
 Drill file 'ESP32-BOBOARD-5V-NPTH.drl' contains
