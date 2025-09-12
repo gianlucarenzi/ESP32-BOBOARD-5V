@@ -172,6 +172,7 @@ void loop(void)
 // Address Bus A0-A15
 
 #define PROTOTYPE 1 // Define PROTOTYPE (some lines are not available)
+//#define PROTOTYPE 0 // Final Revision Board
 
 #if PROTOTYPE == 0
 
@@ -412,10 +413,15 @@ void setup(void)
 	gpio_config(&io_conf);
 
 #if PROTOTYPE == 0
-	// Configurazione pin segnali aggiuntivi come output
-	io_conf.pin_bit_mask = (1ULL << PIN_CCTL) | (1ULL << PIN_D1XX) |
-						   (1ULL << PIN_EXSEL) | (1ULL << PIN_MPD);
+	// Configurazione pin segnali aggiuntivi come output oppure input
+	io_conf.pin_bit_mask = (1ULL << PIN_EXSEL) | (1ULL << PIN_MPD);
 	io_conf.mode = GPIO_MODE_OUTPUT;
+	gpio_config(&io_conf);
+
+	io_conf.pin_bit_mask = 0; // Reset pin_bit_mask
+	io_conf.pin_bit_mask |= (1ULL << PIN_CCTL);
+	io_conf.pin_bit_mask |= (1ULL << PIN_D1XX)
+	io_conf.mode = GPIO_MODE_INPUT;
 	gpio_config(&io_conf);
 #endif
 
@@ -439,11 +445,9 @@ void MonitorTask(void *pvParameters)
 		bool rw = read_gpio_level(PIN_RW);
 			
 		// CCTL
+		//if(gpio_get_level(PIN_CCTL) == 0)
 		if(address >= 0xD500 && address <= 0xD5FF)
 		{
-			#if PROTOTYPE == 0
-				gpio_set_level(PIN_CCTL, 0); // Set CCTL low to indicate access to CCTL memory space
-			#endif
 			if (rw)
 			{
 				// 6502 CPU is LD[X/Y/A] from memory @ $D5xx
@@ -467,19 +471,11 @@ void MonitorTask(void *pvParameters)
 				serialPrintQueue(ANSI_YELLOW "DBG_VERBOSE, CCTL: Received %02X to %04X from CPU\n" ANSI_RESET, data, address);
 			}
 		}
-		else
-		{
-		#if PROTOTYPE == 0
-			gpio_set_level(PIN_CCTL, 1); // Set CCTL high for normal operation
-		#endif
-		}
 
 		// Gestione PBI I/O
+		//if(gpio_get_level(PIN_D1XX) == 0)
 		if(address >= 0xD100 && address <= 0xD1FF)
 		{
-		#if PROTOTYPE == 0
-			gpio_set_level(PIN_D1XX, 0); // Set D1XX low to indicate access to PBI I/O memory space
-		#endif 
 			if (address == 0xD1FF)
 			{
 				// 6502 CPU writes to PBI I/O to select device
@@ -535,16 +531,6 @@ void MonitorTask(void *pvParameters)
 					serialPrintQueue(ANSI_RED "PBI Read or Write @ %04X address. Device must be selected first!\n" ANSI_RESET, address);
 				}
 			}
-			// Restore PIN_D1XX selection
-		#if PROTOTYPE == 0
-			gpio_set_level(PIN_D1XX, 1); // Set D1XX high for normal operation
-		#endif
-		}
-		else
-		{
-		#if PROTOTYPE == 0
-			gpio_set_level(PIN_D1XX, 1); // Set D1XX high for normal operation
-		#endif
 		}
 
 		// Gestione EXSEL e MPD
@@ -620,6 +606,9 @@ void MonitorTask(void *pvParameters)
 			if (cardselected)
 			{
 			#if PROTOTYPE == 0
+				// the real hardware can drive the EXSEL pin to select external memory
+				// only if a PBI card is connected and selected
+				// 6502 CPU writes to Shadow RAM D600-D7FF
 				gpio_set_level(PIN_EXSEL, 0); // Set EXSEL low for external memory
 			#endif
 
