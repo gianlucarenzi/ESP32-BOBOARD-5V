@@ -2,7 +2,7 @@
 <export version="D">
   <design>
     <source>/home/gianluca/Progetti-CVS/ATARI/ESP32-BOBOARD-5V/ESP32-BOBOARD-5V.sch</source>
-    <date>Fri 19 Sep 2025 12:17:44 PM CEST</date>
+    <date>Fri 19 Sep 2025 03:38:28 PM CEST</date>
     <tool>Eeschema 5.1.9+dfsg1-1+deb11u1</tool>
     <sheet number="1" name="/" tstamps="/">
       <title_block>
@@ -51,17 +51,6 @@
       <libsource lib="Logic_LevelTranslator" part="TXS0108EPW" description="Bidirectional  level-shifting voltage translator, TSSOP-20"/>
       <sheetpath names="/" tstamps="/"/>
       <tstamp>687CD33A</tstamp>
-    </comp>
-    <comp ref="J3">
-      <value>Conn_02x16_Counter_Clockwise</value>
-      <footprint>Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD</footprint>
-      <datasheet>~</datasheet>
-      <fields>
-        <field name="LCSC">C3294474 </field>
-      </fields>
-      <libsource lib="Connector_Generic" part="Conn_02x16_Counter_Clockwise" description="Generic connector, double row, 02x16, counter clockwise pin numbering scheme (similar to DIP packge numbering), script generated (kicad-library-utils/schlib/autogen/connector/)"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>687EA841</tstamp>
     </comp>
     <comp ref="J1">
       <value>Conn_01x15</value>
@@ -137,273 +126,282 @@
       <sheetpath names="/" tstamps="/"/>
       <tstamp>688D47DA</tstamp>
     </comp>
-    <comp ref="R4">
-      <value>10K</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F1002TS_C2974059.pdf</datasheet>
+    <comp ref="J3">
+      <value>CONN_02x16_PIN_SMD_Counter_Clockwise</value>
+      <footprint>Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C6332241.pdf</datasheet>
       <fields>
-        <field name="LCSC">C620660</field>
+        <field name="LCSC">C6332241</field>
       </fields>
-      <libsource lib="CRES1210" part="10K" description="500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 10kΩ 1210 Chip Resistor - Surface Mount ROHS"/>
+      <libsource lib="RetroBitLab" part="CONN_02x16_PIN_SMD_Counter_Clockwise" description="Gold 250V 3A Pin Header 2.54mm 32P 6mm -40℃~+105℃ 2.54mm Brass 2 Black 2.54mm 2x16P SMD,P=2.54mm Pin Headers ROHS"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CE380E</tstamp>
-    </comp>
-    <comp ref="R3">
-      <value>10K</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F1002TS_C2974059.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C620660</field>
-      </fields>
-      <libsource lib="CRES1210" part="10K" description="500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 10kΩ 1210 Chip Resistor - Surface Mount ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CE7512</tstamp>
-    </comp>
-    <comp ref="R1">
-      <value>10K</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F1002TS_C2974059.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C620660</field>
-      </fields>
-      <libsource lib="CRES1210" part="10K" description="500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 10kΩ 1210 Chip Resistor - Surface Mount ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CE9C38</tstamp>
-    </comp>
-    <comp ref="C5">
-      <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C90143</field>
-      </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CF2338</tstamp>
-    </comp>
-    <comp ref="C6">
-      <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C90143</field>
-      </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CF7B2E</tstamp>
-    </comp>
-    <comp ref="C7">
-      <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C90143</field>
-      </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CFB714</tstamp>
-    </comp>
-    <comp ref="C8">
-      <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C90143</field>
-      </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CFC811</tstamp>
-    </comp>
-    <comp ref="C3">
-      <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C90143</field>
-      </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68CFEF54</tstamp>
-    </comp>
-    <comp ref="C4">
-      <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C90143</field>
-      </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D00ED4</tstamp>
+      <tstamp>68D1A2AD</tstamp>
     </comp>
     <comp ref="C1">
       <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
       <fields>
-        <field name="LCSC">C90143</field>
+        <field name="LCSC">C141660</field>
       </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D01D5A</tstamp>
+      <tstamp>68D279D6</tstamp>
     </comp>
     <comp ref="C2">
       <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
       <fields>
-        <field name="LCSC">C90143</field>
+        <field name="LCSC">C141660</field>
       </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D03816</tstamp>
+      <tstamp>68D4ED6F</tstamp>
     </comp>
-    <comp ref="R2">
-      <value>10K</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F1002TS_C2974059.pdf</datasheet>
+    <comp ref="C3">
+      <value>100uF</value>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
       <fields>
-        <field name="LCSC">C620660</field>
+        <field name="LCSC">C141660</field>
       </fields>
-      <libsource lib="CRES1210" part="10K" description="500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 10kΩ 1210 Chip Resistor - Surface Mount ROHS"/>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D0941B</tstamp>
+      <tstamp>68D544C6</tstamp>
+    </comp>
+    <comp ref="C4">
+      <value>100uF</value>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C141660</field>
+      </fields>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68D5A2C5</tstamp>
+    </comp>
+    <comp ref="C5">
+      <value>100uF</value>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C141660</field>
+      </fields>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68D5CBB1</tstamp>
+    </comp>
+    <comp ref="C6">
+      <value>100uF</value>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C141660</field>
+      </fields>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68D5D306</tstamp>
+    </comp>
+    <comp ref="C7">
+      <value>100uF</value>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C141660</field>
+      </fields>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68D6F745</tstamp>
+    </comp>
+    <comp ref="C8">
+      <value>100uF</value>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C141660</field>
+      </fields>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68D7046E</tstamp>
     </comp>
     <comp ref="R5">
       <value>5K1</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C2119494.pdf</datasheet>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C27834.pdf</datasheet>
       <fields>
-        <field name="LCSC">C2119494</field>
+        <field name="LCSC">C27834</field>
       </fields>
-      <libsource lib="CRES1210" part="5K1" description="500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 5.1kΩ 1210 Chip Resistor - Surface Mount ROHS"/>
+      <libsource lib="CRES0805" part="5K1" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 5.1kΩ 0805 Chip Resistor - Surface Mount ROHS"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D0C808</tstamp>
+      <tstamp>68D7E1E3</tstamp>
     </comp>
     <comp ref="R6">
       <value>5K1</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C2119494.pdf</datasheet>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C27834.pdf</datasheet>
       <fields>
-        <field name="LCSC">C2119494</field>
+        <field name="LCSC">C27834</field>
       </fields>
-      <libsource lib="CRES1210" part="5K1" description="500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 5.1kΩ 1210 Chip Resistor - Surface Mount ROHS"/>
+      <libsource lib="CRES0805" part="5K1" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 5.1kΩ 0805 Chip Resistor - Surface Mount ROHS"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D0F7E3</tstamp>
-    </comp>
-    <comp ref="C9">
-      <value>100uF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://www.lcsc.com/datasheet/C90143.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C90143</field>
-      </fields>
-      <libsource lib="CCAP1210" part="100uF" description="16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D10F39</tstamp>
-    </comp>
-    <comp ref="R7">
-      <value>CREZ12101%</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F0000TS_C2974058.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C2974058</field>
-      </fields>
-      <libsource lib="CRES1210" part="CREZ12101%" description="500mW Thick Film Resistor 200V ±1% ±200ppm/℃ 0Ω 1210 Chip Resistor - Surface Mount ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D15C9B</tstamp>
-    </comp>
-    <comp ref="R8">
-      <value>CREZ12101%</value>
-      <footprint>Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</footprint>
-      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F0000TS_C2974058.pdf</datasheet>
-      <fields>
-        <field name="LCSC">C2974058</field>
-      </fields>
-      <libsource lib="CRES1210" part="CREZ12101%" description="500mW Thick Film Resistor 200V ±1% ±200ppm/℃ 0Ω 1210 Chip Resistor - Surface Mount ROHS"/>
-      <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D17A69</tstamp>
+      <tstamp>68D8111A</tstamp>
     </comp>
     <comp ref="C10">
       <value>100nF</value>
-      <footprint>Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</footprint>
-      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2411271919_Knowles-1210Y1000104MXT_C2351189.pdf</datasheet>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C840116.pdf</datasheet>
       <fields>
-        <field name="LCSC">C2351189</field>
+        <field name="LCSC">C840116</field>
       </fields>
-      <libsource lib="CCAP1210" part="100nF" description="100V 100nF X7R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <libsource lib="CCAP0805" part="100nF" description="100V 100nF X7R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
       <sheetpath names="/" tstamps="/"/>
-      <tstamp>68D18B67</tstamp>
+      <tstamp>68D88C22</tstamp>
+    </comp>
+    <comp ref="C9">
+      <value>100uF</value>
+      <footprint>Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</footprint>
+      <datasheet>https://www.lcsc.com/datasheet/C141660.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C141660</field>
+      </fields>
+      <libsource lib="CCAP0805" part="100uF" description="6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68DB560F</tstamp>
+    </comp>
+    <comp ref="R8">
+      <value>CREZ08051%</value>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <fields>
+        <field name="LCSC">C328378</field>
+      </fields>
+      <libsource lib="CRES0805" part="CREZ08051%" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 0Ω 0805 Chip Resistor - Surface Mount ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68DBEA28</tstamp>
+    </comp>
+    <comp ref="R7">
+      <value>CREZ08051%</value>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <fields>
+        <field name="LCSC">C328378</field>
+      </fields>
+      <libsource lib="CRES0805" part="CREZ08051%" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 0Ω 0805 Chip Resistor - Surface Mount ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68DC29F1</tstamp>
+    </comp>
+    <comp ref="R2">
+      <value>10K</value>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2506161110_YAGEO-RC0805FR-0710KL_C84376.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C84376</field>
+      </fields>
+      <libsource lib="CRES0805" part="10K" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 10kΩ 0805 Chip Resistor - Surface Mount ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68DCAAA8</tstamp>
+    </comp>
+    <comp ref="R1">
+      <value>10K</value>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2506161110_YAGEO-RC0805FR-0710KL_C84376.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C84376</field>
+      </fields>
+      <libsource lib="CRES0805" part="10K" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 10kΩ 0805 Chip Resistor - Surface Mount ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68DCF130</tstamp>
+    </comp>
+    <comp ref="R3">
+      <value>10K</value>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2506161110_YAGEO-RC0805FR-0710KL_C84376.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C84376</field>
+      </fields>
+      <libsource lib="CRES0805" part="10K" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 10kΩ 0805 Chip Resistor - Surface Mount ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68DD2164</tstamp>
+    </comp>
+    <comp ref="R4">
+      <value>10K</value>
+      <footprint>Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</footprint>
+      <datasheet>https://lcsc.com/datasheet/lcsc_datasheet_2506161110_YAGEO-RC0805FR-0710KL_C84376.pdf</datasheet>
+      <fields>
+        <field name="LCSC">C84376</field>
+      </fields>
+      <libsource lib="CRES0805" part="10K" description="125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 10kΩ 0805 Chip Resistor - Surface Mount ROHS"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>68DD38DD</tstamp>
     </comp>
   </components>
   <libparts>
-    <libpart lib="CCAP1210" part="100nF">
-      <description>100V 100nF X7R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS</description>
-      <docs>https://lcsc.com/datasheet/lcsc_datasheet_2411271919_Knowles-1210Y1000104MXT_C2351189.pdf</docs>
+    <libpart lib="CCAP0805" part="100nF">
+      <description>100V 100nF X7R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS</description>
+      <docs>https://www.lcsc.com/datasheet/C840116.pdf</docs>
       <fields>
         <field name="Reference">C</field>
         <field name="Value">100nF</field>
-        <field name="Footprint">Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</field>
-        <field name="LCSC">C2351189</field>
+        <field name="Footprint">Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</field>
+        <field name="LCSC">C840116</field>
       </fields>
       <pins>
         <pin num="1" name="~" type="passive"/>
         <pin num="2" name="~" type="passive"/>
       </pins>
     </libpart>
-    <libpart lib="CCAP1210" part="100uF">
-      <description>16V 100uF X5R ±20% 1210 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS</description>
-      <docs>https://www.lcsc.com/datasheet/C90143.pdf</docs>
+    <libpart lib="CCAP0805" part="100uF">
+      <description>6.3V 100uF X5R ±20% 0805 Multilayer Ceramic Capacitors MLCC - SMD/SMT ROHS</description>
+      <docs>https://www.lcsc.com/datasheet/C141660.pdf</docs>
       <fields>
         <field name="Reference">C</field>
         <field name="Value">100uF</field>
-        <field name="Footprint">Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder</field>
-        <field name="LCSC">C90143</field>
+        <field name="Footprint">Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder</field>
+        <field name="LCSC">C141660</field>
       </fields>
       <pins>
         <pin num="1" name="~" type="passive"/>
         <pin num="2" name="~" type="passive"/>
       </pins>
     </libpart>
-    <libpart lib="CRES1210" part="0R">
+    <libpart lib="CRES0805" part="0R">
       <aliases>
-        <alias>CREZ12101%</alias>
+        <alias>CREZ08051%</alias>
       </aliases>
-      <description>500mW Thick Film Resistor 200V ±1% 0Ω 1210 Chip Resistor - Surface Mount ROHS</description>
-      <docs>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F0000TS_C2974058.pdf</docs>
+      <description>125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 0Ω 0805 Chip Resistor - Surface Mount ROHS</description>
+      <docs>https://www.lcsc.com/datasheet/C328378.pdf</docs>
       <fields>
         <field name="Reference">R</field>
         <field name="Value">0R</field>
-        <field name="Footprint">Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</field>
-        <field name="LCSC">C2974058</field>
+        <field name="Footprint">Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</field>
+        <field name="LCSC">C328378</field>
       </fields>
       <pins>
         <pin num="1" name="~" type="passive"/>
         <pin num="2" name="~" type="passive"/>
       </pins>
     </libpart>
-    <libpart lib="CRES1210" part="10K">
-      <description>500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 10kΩ 1210 Chip Resistor - Surface Mount ROHS</description>
-      <docs>https://lcsc.com/datasheet/lcsc_datasheet_2408150952_FOJAN-FRC1210F1002TS_C2974059.pdf</docs>
+    <libpart lib="CRES0805" part="10K">
+      <description>125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 10kΩ 0805 Chip Resistor - Surface Mount ROHS</description>
+      <docs>https://lcsc.com/datasheet/lcsc_datasheet_2506161110_YAGEO-RC0805FR-0710KL_C84376.pdf</docs>
       <fields>
         <field name="Reference">R</field>
         <field name="Value">10K</field>
-        <field name="Footprint">Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</field>
-        <field name="LCSC">C620660</field>
+        <field name="Footprint">Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</field>
+        <field name="LCSC">C84376</field>
       </fields>
       <pins>
         <pin num="1" name="~" type="passive"/>
         <pin num="2" name="~" type="passive"/>
       </pins>
     </libpart>
-    <libpart lib="CRES1210" part="5K1">
-      <description>500mW Thick Film Resistor 200V ±100ppm/℃ ±1% 5.1kΩ 1210 Chip Resistor - Surface Mount ROHS</description>
-      <docs>https://www.lcsc.com/datasheet/C2119494.pdf</docs>
+    <libpart lib="CRES0805" part="5K1">
+      <description>125mW Thick Film Resistor 150V ±100ppm/℃ ±1% 5.1kΩ 0805 Chip Resistor - Surface Mount ROHS</description>
+      <docs>https://www.lcsc.com/datasheet/C27834.pdf</docs>
       <fields>
         <field name="Reference">R</field>
         <field name="Value">5K1</field>
-        <field name="Footprint">Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder</field>
-        <field name="LCSC">C2119494</field>
+        <field name="Footprint">Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder</field>
+        <field name="LCSC">C27834</field>
       </fields>
       <pins>
         <pin num="1" name="~" type="passive"/>
@@ -454,15 +452,51 @@
         <pin num="15" name="Pin_15" type="passive"/>
       </pins>
     </libpart>
-    <libpart lib="Connector_Generic" part="Conn_02x16_Counter_Clockwise">
-      <description>Generic connector, double row, 02x16, counter clockwise pin numbering scheme (similar to DIP packge numbering), script generated (kicad-library-utils/schlib/autogen/connector/)</description>
-      <docs>~</docs>
+    <libpart lib="Logic_LevelTranslator" part="TXS0108EPW">
+      <description>Bidirectional  level-shifting voltage translator, TSSOP-20</description>
+      <docs>www.ti.com/lit/ds/symlink/txs0108e.pdf</docs>
+      <footprints>
+        <fp>*SSOP*4.4x6.5mm*P0.65mm*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">TXS0108EPW</field>
+        <field name="Footprint">Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm</field>
+      </fields>
+      <pins>
+        <pin num="1" name="A1" type="BiDi"/>
+        <pin num="2" name="VCCA" type="power_in"/>
+        <pin num="3" name="A2" type="BiDi"/>
+        <pin num="4" name="A3" type="BiDi"/>
+        <pin num="5" name="A4" type="BiDi"/>
+        <pin num="6" name="A5" type="BiDi"/>
+        <pin num="7" name="A6" type="BiDi"/>
+        <pin num="8" name="A7" type="BiDi"/>
+        <pin num="9" name="A8" type="BiDi"/>
+        <pin num="10" name="OE" type="input"/>
+        <pin num="11" name="GND" type="power_in"/>
+        <pin num="12" name="B8" type="BiDi"/>
+        <pin num="13" name="B7" type="BiDi"/>
+        <pin num="14" name="B6" type="BiDi"/>
+        <pin num="15" name="B5" type="BiDi"/>
+        <pin num="16" name="B4" type="BiDi"/>
+        <pin num="17" name="B3" type="BiDi"/>
+        <pin num="18" name="B2" type="BiDi"/>
+        <pin num="19" name="VCCB" type="power_in"/>
+        <pin num="20" name="B1" type="BiDi"/>
+      </pins>
+    </libpart>
+    <libpart lib="RetroBitLab" part="CONN_02x16_PIN_SMD_Counter_Clockwise">
+      <description>Gold 250V 3A Pin Header 2.54mm 32P 6mm -40℃~+105℃ 2.54mm Brass 2 Black 2.54mm 2x16P SMD,P=2.54mm Pin Headers ROHS</description>
+      <docs>https://www.lcsc.com/datasheet/C6332241.pdf</docs>
       <footprints>
         <fp>Connector*:*_2x??_*</fp>
       </footprints>
       <fields>
         <field name="Reference">J</field>
-        <field name="Value">Conn_02x16_Counter_Clockwise</field>
+        <field name="Value">CONN_02x16_PIN_SMD_Counter_Clockwise</field>
+        <field name="Footprint">Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD</field>
+        <field name="LCSC">C6332241</field>
       </fields>
       <pins>
         <pin num="1" name="Pin_1" type="passive"/>
@@ -497,40 +531,6 @@
         <pin num="30" name="Pin_30" type="passive"/>
         <pin num="31" name="Pin_31" type="passive"/>
         <pin num="32" name="Pin_32" type="passive"/>
-      </pins>
-    </libpart>
-    <libpart lib="Logic_LevelTranslator" part="TXS0108EPW">
-      <description>Bidirectional  level-shifting voltage translator, TSSOP-20</description>
-      <docs>www.ti.com/lit/ds/symlink/txs0108e.pdf</docs>
-      <footprints>
-        <fp>*SSOP*4.4x6.5mm*P0.65mm*</fp>
-      </footprints>
-      <fields>
-        <field name="Reference">U</field>
-        <field name="Value">TXS0108EPW</field>
-        <field name="Footprint">Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm</field>
-      </fields>
-      <pins>
-        <pin num="1" name="A1" type="BiDi"/>
-        <pin num="2" name="VCCA" type="power_in"/>
-        <pin num="3" name="A2" type="BiDi"/>
-        <pin num="4" name="A3" type="BiDi"/>
-        <pin num="5" name="A4" type="BiDi"/>
-        <pin num="6" name="A5" type="BiDi"/>
-        <pin num="7" name="A6" type="BiDi"/>
-        <pin num="8" name="A7" type="BiDi"/>
-        <pin num="9" name="A8" type="BiDi"/>
-        <pin num="10" name="OE" type="input"/>
-        <pin num="11" name="GND" type="power_in"/>
-        <pin num="12" name="B8" type="BiDi"/>
-        <pin num="13" name="B7" type="BiDi"/>
-        <pin num="14" name="B6" type="BiDi"/>
-        <pin num="15" name="B5" type="BiDi"/>
-        <pin num="16" name="B4" type="BiDi"/>
-        <pin num="17" name="B3" type="BiDi"/>
-        <pin num="18" name="B2" type="BiDi"/>
-        <pin num="19" name="VCCB" type="power_in"/>
-        <pin num="20" name="B1" type="BiDi"/>
       </pins>
     </libpart>
     <libpart lib="RetroBitLab" part="DX07S016JA1R1500">
@@ -602,11 +602,11 @@
     </libpart>
   </libparts>
   <libraries>
-    <library logical="CCAP1210">
-      <uri>/home/gianluca/Progetti/RetroBitLab-Library/CCAP1210.lib</uri>
+    <library logical="CCAP0805">
+      <uri>/home/gianluca/Progetti/RetroBitLab-Library/CCAP0805.lib</uri>
     </library>
-    <library logical="CRES1210">
-      <uri>/home/gianluca/Progetti/RetroBitLab-Library/CRES1210.lib</uri>
+    <library logical="CRES0805">
+      <uri>/home/gianluca/Progetti/RetroBitLab-Library/CRES0805.lib</uri>
     </library>
     <library logical="Connector">
       <uri>/usr/share/kicad/library/Connector.lib</uri>
@@ -622,324 +622,324 @@
     </library>
   </libraries>
   <nets>
-    <net code="1" name="/mRX2">
-      <node ref="U4" pin="14"/>
-      <node ref="J3" pin="22"/>
+    <net code="1" name="Net-(J3-Pad24)">
+      <node ref="J3" pin="24"/>
     </net>
-    <net code="2" name="/mVP">
-      <node ref="J3" pin="20"/>
-      <node ref="U4" pin="16"/>
+    <net code="2" name="Net-(J3-Pad25)">
+      <node ref="J3" pin="25"/>
     </net>
-    <net code="3" name="/mVN">
-      <node ref="J3" pin="21"/>
-      <node ref="U4" pin="15"/>
-    </net>
-    <net code="4" name="/mTX2">
-      <node ref="U4" pin="13"/>
-      <node ref="J3" pin="23"/>
-    </net>
-    <net code="5" name="/mD33">
-      <node ref="J3" pin="17"/>
-      <node ref="U4" pin="20"/>
-    </net>
-    <net code="6" name="/mD34">
-      <node ref="J3" pin="18"/>
-      <node ref="U4" pin="18"/>
-    </net>
-    <net code="7" name="/mD35">
-      <node ref="J3" pin="19"/>
-      <node ref="U4" pin="17"/>
-    </net>
-    <net code="8" name="+5V">
-      <node ref="U4" pin="19"/>
-      <node ref="C7" pin="1"/>
-      <node ref="J3" pin="31"/>
-      <node ref="J3" pin="32"/>
-      <node ref="U1" pin="19"/>
-      <node ref="C9" pin="1"/>
-      <node ref="C2" pin="1"/>
-      <node ref="C5" pin="1"/>
-      <node ref="C3" pin="1"/>
-      <node ref="U3" pin="19"/>
-      <node ref="J2" pin="1"/>
-      <node ref="J5" pin="2"/>
-      <node ref="J5" pin="11"/>
-    </net>
-    <net code="9" name="/mD21">
-      <node ref="U3" pin="18"/>
-      <node ref="J3" pin="10"/>
-    </net>
-    <net code="10" name="/mD19">
-      <node ref="U3" pin="20"/>
-      <node ref="J3" pin="9"/>
-    </net>
-    <net code="11" name="/mD22">
-      <node ref="U3" pin="17"/>
-      <node ref="J3" pin="11"/>
-    </net>
-    <net code="12" name="/mD23">
-      <node ref="J3" pin="12"/>
-      <node ref="U3" pin="16"/>
-    </net>
-    <net code="13" name="/mD25">
-      <node ref="J3" pin="13"/>
-      <node ref="U3" pin="15"/>
-    </net>
-    <net code="14" name="/mD26">
-      <node ref="U3" pin="14"/>
-      <node ref="J3" pin="14"/>
-    </net>
-    <net code="15" name="/mD27">
-      <node ref="J3" pin="15"/>
-      <node ref="U3" pin="13"/>
-    </net>
-    <net code="16" name="/mD32">
-      <node ref="J3" pin="16"/>
-      <node ref="U3" pin="12"/>
-    </net>
-    <net code="17" name="Net-(J5-Pad10)">
+    <net code="3" name="Net-(J5-Pad10)">
       <node ref="J5" pin="10"/>
     </net>
-    <net code="18" name="Net-(J5-Pad4)">
+    <net code="4" name="+5V">
+      <node ref="C7" pin="1"/>
+      <node ref="C5" pin="1"/>
+      <node ref="C9" pin="1"/>
+      <node ref="C3" pin="1"/>
+      <node ref="C2" pin="1"/>
+      <node ref="J3" pin="32"/>
+      <node ref="J3" pin="31"/>
+      <node ref="U3" pin="19"/>
+      <node ref="U1" pin="19"/>
+      <node ref="J2" pin="1"/>
+      <node ref="U4" pin="19"/>
+      <node ref="J5" pin="11"/>
+      <node ref="J5" pin="2"/>
+    </net>
+    <net code="5" name="Net-(J5-Pad3)">
+      <node ref="J5" pin="3"/>
+      <node ref="R5" pin="1"/>
+    </net>
+    <net code="6" name="Net-(J5-Pad4)">
       <node ref="J5" pin="4"/>
     </net>
-    <net code="19" name="/EN">
+    <net code="7" name="GND">
+      <node ref="J5" pin="12"/>
+      <node ref="SW1" pin="2"/>
+      <node ref="U4" pin="11"/>
+      <node ref="J3" pin="30"/>
+      <node ref="R5" pin="2"/>
+      <node ref="C9" pin="2"/>
+      <node ref="C10" pin="2"/>
+      <node ref="R6" pin="1"/>
+      <node ref="C4" pin="2"/>
+      <node ref="C5" pin="2"/>
+      <node ref="C6" pin="2"/>
+      <node ref="C3" pin="2"/>
+      <node ref="C2" pin="2"/>
+      <node ref="C1" pin="2"/>
+      <node ref="C7" pin="2"/>
+      <node ref="J3" pin="29"/>
+      <node ref="C8" pin="2"/>
+      <node ref="U3" pin="11"/>
+      <node ref="J2" pin="2"/>
+      <node ref="U1" pin="11"/>
+      <node ref="J1" pin="2"/>
+      <node ref="J4" pin="1"/>
+      <node ref="J5" pin="1"/>
+    </net>
+    <net code="8" name="+3V3">
+      <node ref="J3" pin="28"/>
+      <node ref="R2" pin="2"/>
+      <node ref="R3" pin="2"/>
+      <node ref="R1" pin="2"/>
+      <node ref="R4" pin="2"/>
+      <node ref="C6" pin="1"/>
+      <node ref="U3" pin="2"/>
+      <node ref="C8" pin="1"/>
+      <node ref="C1" pin="1"/>
+      <node ref="J3" pin="27"/>
+      <node ref="U1" pin="2"/>
+      <node ref="U4" pin="2"/>
+      <node ref="J1" pin="1"/>
+      <node ref="C4" pin="1"/>
+    </net>
+    <net code="9" name="/EN">
       <node ref="R2" pin="1"/>
       <node ref="J2" pin="15"/>
       <node ref="J3" pin="26"/>
     </net>
-    <net code="20" name="GND">
-      <node ref="U1" pin="11"/>
-      <node ref="U3" pin="11"/>
-      <node ref="J3" pin="30"/>
-      <node ref="J3" pin="29"/>
-      <node ref="U4" pin="11"/>
-      <node ref="J1" pin="2"/>
-      <node ref="J2" pin="2"/>
-      <node ref="J5" pin="12"/>
-      <node ref="C4" pin="2"/>
-      <node ref="J4" pin="1"/>
-      <node ref="C3" pin="2"/>
-      <node ref="J5" pin="1"/>
-      <node ref="C8" pin="2"/>
-      <node ref="C7" pin="2"/>
-      <node ref="C5" pin="2"/>
-      <node ref="C10" pin="2"/>
-      <node ref="C6" pin="2"/>
-      <node ref="C1" pin="2"/>
-      <node ref="C9" pin="2"/>
-      <node ref="SW1" pin="2"/>
-      <node ref="R6" pin="1"/>
-      <node ref="R5" pin="2"/>
-      <node ref="C2" pin="2"/>
+    <net code="10" name="Net-(J5-Pad9)">
+      <node ref="J5" pin="9"/>
+      <node ref="R6" pin="2"/>
     </net>
-    <net code="21" name="+3V3">
-      <node ref="C8" pin="1"/>
-      <node ref="J3" pin="28"/>
-      <node ref="J3" pin="27"/>
-      <node ref="J1" pin="1"/>
-      <node ref="U3" pin="2"/>
-      <node ref="C6" pin="1"/>
-      <node ref="U1" pin="2"/>
-      <node ref="U4" pin="2"/>
-      <node ref="R3" pin="1"/>
-      <node ref="C1" pin="1"/>
-      <node ref="R1" pin="1"/>
-      <node ref="R2" pin="2"/>
-      <node ref="C4" pin="1"/>
-      <node ref="R4" pin="1"/>
+    <net code="11" name="Net-(C10-Pad1)">
+      <node ref="J5" pin="S1"/>
+      <node ref="J5" pin="S2"/>
+      <node ref="C10" pin="1"/>
+      <node ref="J5" pin="S6"/>
+      <node ref="J5" pin="S5"/>
+      <node ref="J5" pin="S4"/>
+      <node ref="J5" pin="S3"/>
     </net>
-    <net code="22" name="/mD18">
-      <node ref="J3" pin="8"/>
-      <node ref="U1" pin="12"/>
-    </net>
-    <net code="23" name="Net-(J3-Pad25)">
-      <node ref="J3" pin="25"/>
-    </net>
-    <net code="24" name="Net-(J3-Pad24)">
-      <node ref="J3" pin="24"/>
-    </net>
-    <net code="25" name="Net-(U4-Pad12)">
-      <node ref="U4" pin="12"/>
-    </net>
-    <net code="26" name="/D32">
-      <node ref="J2" pin="10"/>
-      <node ref="U3" pin="9"/>
-    </net>
-    <net code="27" name="/D15">
-      <node ref="U1" pin="8"/>
-      <node ref="J1" pin="3"/>
-    </net>
-    <net code="28" name="/D18">
-      <node ref="J1" pin="9"/>
-      <node ref="U1" pin="9"/>
-    </net>
-    <net code="29" name="/D19">
-      <node ref="U3" pin="1"/>
-      <node ref="J1" pin="10"/>
-    </net>
-    <net code="30" name="/D21">
-      <node ref="J1" pin="11"/>
-      <node ref="U3" pin="3"/>
-    </net>
-    <net code="31" name="/D22">
-      <node ref="J1" pin="14"/>
-      <node ref="U3" pin="4"/>
-    </net>
-    <net code="32" name="/D23">
-      <node ref="J1" pin="15"/>
-      <node ref="U3" pin="5"/>
-    </net>
-    <net code="33" name="/D25">
-      <node ref="U3" pin="6"/>
-      <node ref="J2" pin="8"/>
-    </net>
-    <net code="34" name="/D26">
-      <node ref="U3" pin="7"/>
-      <node ref="J2" pin="7"/>
-    </net>
-    <net code="35" name="/D27">
-      <node ref="U3" pin="8"/>
-      <node ref="J2" pin="6"/>
-    </net>
-    <net code="36" name="/D33">
-      <node ref="U4" pin="1"/>
-      <node ref="J2" pin="9"/>
-    </net>
-    <net code="37" name="/D34">
-      <node ref="J2" pin="12"/>
-      <node ref="U4" pin="3"/>
-    </net>
-    <net code="38" name="/D35">
-      <node ref="U4" pin="4"/>
-      <node ref="J2" pin="11"/>
-    </net>
-    <net code="39" name="/VP">
-      <node ref="U4" pin="5"/>
-      <node ref="J2" pin="14"/>
-    </net>
-    <net code="40" name="/VN">
-      <node ref="U4" pin="6"/>
-      <node ref="J2" pin="13"/>
-    </net>
-    <net code="41" name="/RX2">
-      <node ref="J1" pin="6"/>
-      <node ref="U4" pin="7"/>
-    </net>
-    <net code="42" name="/TX2">
-      <node ref="J1" pin="7"/>
-      <node ref="U4" pin="8"/>
-    </net>
-    <net code="43" name="Net-(U4-Pad9)">
-      <node ref="U4" pin="9"/>
-    </net>
-    <net code="44" name="/mD15">
-      <node ref="J3" pin="7"/>
-      <node ref="U1" pin="13"/>
-    </net>
-    <net code="45" name="/mD2">
-      <node ref="J3" pin="1"/>
+    <net code="12" name="/mD2">
       <node ref="U1" pin="20"/>
+      <node ref="J3" pin="1"/>
     </net>
-    <net code="46" name="/mD4">
+    <net code="13" name="/mD32">
+      <node ref="U3" pin="12"/>
+      <node ref="J3" pin="16"/>
+    </net>
+    <net code="14" name="/mD19">
+      <node ref="J3" pin="9"/>
+      <node ref="U3" pin="20"/>
+    </net>
+    <net code="15" name="/mD21">
+      <node ref="J3" pin="10"/>
+      <node ref="U3" pin="18"/>
+    </net>
+    <net code="16" name="/mD22">
+      <node ref="U3" pin="17"/>
+      <node ref="J3" pin="11"/>
+    </net>
+    <net code="17" name="/mD23">
+      <node ref="U3" pin="16"/>
+      <node ref="J3" pin="12"/>
+    </net>
+    <net code="18" name="/mD25">
+      <node ref="J3" pin="13"/>
+      <node ref="U3" pin="15"/>
+    </net>
+    <net code="19" name="/mD26">
+      <node ref="J3" pin="14"/>
+      <node ref="U3" pin="14"/>
+    </net>
+    <net code="20" name="/mD27">
+      <node ref="J3" pin="15"/>
+      <node ref="U3" pin="13"/>
+    </net>
+    <net code="21" name="/mD4">
       <node ref="U1" pin="18"/>
       <node ref="J3" pin="2"/>
     </net>
-    <net code="47" name="/mD5">
+    <net code="22" name="/mD5">
       <node ref="U1" pin="17"/>
       <node ref="J3" pin="3"/>
     </net>
-    <net code="48" name="/mD12">
+    <net code="23" name="/mD12">
       <node ref="U1" pin="16"/>
       <node ref="J3" pin="4"/>
     </net>
-    <net code="49" name="/mD13">
-      <node ref="J3" pin="5"/>
+    <net code="24" name="/mD13">
       <node ref="U1" pin="15"/>
+      <node ref="J3" pin="5"/>
     </net>
-    <net code="50" name="/mD14">
+    <net code="25" name="/mD14">
       <node ref="U1" pin="14"/>
       <node ref="J3" pin="6"/>
     </net>
-    <net code="51" name="/RX0">
+    <net code="26" name="/mD15">
+      <node ref="J3" pin="7"/>
+      <node ref="U1" pin="13"/>
+    </net>
+    <net code="27" name="/mD18">
+      <node ref="J3" pin="8"/>
+      <node ref="U1" pin="12"/>
+    </net>
+    <net code="28" name="/TX0">
+      <node ref="J4" pin="3"/>
+      <node ref="J1" pin="13"/>
+    </net>
+    <net code="29" name="Net-(U4-Pad12)">
+      <node ref="U4" pin="12"/>
+    </net>
+    <net code="30" name="/RX0">
       <node ref="J1" pin="12"/>
       <node ref="J4" pin="2"/>
     </net>
-    <net code="52" name="/TX0">
-      <node ref="J1" pin="13"/>
-      <node ref="J4" pin="3"/>
+    <net code="31" name="/mTX2">
+      <node ref="U4" pin="13"/>
+      <node ref="J3" pin="23"/>
     </net>
-    <net code="53" name="TXS_EN">
-      <node ref="R3" pin="2"/>
-      <node ref="SW1" pin="3"/>
-      <node ref="R1" pin="2"/>
-      <node ref="R4" pin="2"/>
-      <node ref="U3" pin="10"/>
-      <node ref="U4" pin="10"/>
-      <node ref="U1" pin="10"/>
+    <net code="32" name="/mD33">
+      <node ref="U4" pin="20"/>
+      <node ref="J3" pin="17"/>
     </net>
-    <net code="54" name="Net-(SW1-Pad4)">
-      <node ref="SW1" pin="4"/>
+    <net code="33" name="/mD34">
+      <node ref="J3" pin="18"/>
+      <node ref="U4" pin="18"/>
     </net>
-    <net code="55" name="Net-(SW1-Pad1)">
-      <node ref="SW1" pin="1"/>
+    <net code="34" name="/mD35">
+      <node ref="J3" pin="19"/>
+      <node ref="U4" pin="17"/>
     </net>
-    <net code="56" name="Net-(C10-Pad1)">
-      <node ref="J5" pin="S3"/>
-      <node ref="J5" pin="S6"/>
-      <node ref="J5" pin="S5"/>
-      <node ref="J5" pin="S2"/>
-      <node ref="J5" pin="S1"/>
-      <node ref="J5" pin="S4"/>
-      <node ref="C10" pin="1"/>
+    <net code="35" name="/mVP">
+      <node ref="U4" pin="16"/>
+      <node ref="J3" pin="20"/>
     </net>
-    <net code="57" name="Net-(J5-Pad3)">
-      <node ref="R5" pin="1"/>
-      <node ref="J5" pin="3"/>
+    <net code="36" name="/mVN">
+      <node ref="U4" pin="15"/>
+      <node ref="J3" pin="21"/>
     </net>
-    <net code="58" name="Net-(J5-Pad9)">
-      <node ref="R6" pin="2"/>
-      <node ref="J5" pin="9"/>
+    <net code="37" name="/mRX2">
+      <node ref="U4" pin="14"/>
+      <node ref="J3" pin="22"/>
     </net>
-    <net code="59" name="Net-(R7-Pad2)">
+    <net code="38" name="Net-(R7-Pad2)">
       <node ref="R7" pin="2"/>
     </net>
-    <net code="60" name="/USBD_N">
-      <node ref="R7" pin="1"/>
-      <node ref="J5" pin="5"/>
-      <node ref="J5" pin="8"/>
-    </net>
-    <net code="61" name="/USBD_P">
-      <node ref="J5" pin="6"/>
-      <node ref="R8" pin="1"/>
-      <node ref="J5" pin="7"/>
-    </net>
-    <net code="62" name="Net-(R8-Pad2)">
+    <net code="39" name="Net-(R8-Pad2)">
       <node ref="R8" pin="2"/>
     </net>
-    <net code="63" name="/D14">
-      <node ref="J2" pin="5"/>
-      <node ref="U1" pin="7"/>
+    <net code="40" name="/USBD_P">
+      <node ref="J5" pin="7"/>
+      <node ref="R8" pin="1"/>
+      <node ref="J5" pin="6"/>
     </net>
-    <net code="64" name="/D13">
-      <node ref="U1" pin="6"/>
-      <node ref="J2" pin="3"/>
+    <net code="41" name="/USBD_N">
+      <node ref="J5" pin="5"/>
+      <node ref="J5" pin="8"/>
+      <node ref="R7" pin="1"/>
     </net>
-    <net code="65" name="/D12">
+    <net code="42" name="Net-(SW1-Pad4)">
+      <node ref="SW1" pin="4"/>
+    </net>
+    <net code="43" name="Net-(SW1-Pad1)">
+      <node ref="SW1" pin="1"/>
+    </net>
+    <net code="44" name="TXS_EN">
+      <node ref="R4" pin="1"/>
+      <node ref="R3" pin="1"/>
+      <node ref="R1" pin="1"/>
+      <node ref="U1" pin="10"/>
+      <node ref="U3" pin="10"/>
+      <node ref="SW1" pin="3"/>
+      <node ref="U4" pin="10"/>
+    </net>
+    <net code="45" name="/D34">
+      <node ref="J2" pin="12"/>
+      <node ref="U4" pin="3"/>
+    </net>
+    <net code="46" name="/D35">
+      <node ref="U4" pin="4"/>
+      <node ref="J2" pin="11"/>
+    </net>
+    <net code="47" name="/VP">
+      <node ref="U4" pin="5"/>
+      <node ref="J2" pin="14"/>
+    </net>
+    <net code="48" name="/VN">
+      <node ref="U4" pin="6"/>
+      <node ref="J2" pin="13"/>
+    </net>
+    <net code="49" name="/RX2">
+      <node ref="J1" pin="6"/>
+      <node ref="U4" pin="7"/>
+    </net>
+    <net code="50" name="/TX2">
+      <node ref="J1" pin="7"/>
+      <node ref="U4" pin="8"/>
+    </net>
+    <net code="51" name="Net-(U4-Pad9)">
+      <node ref="U4" pin="9"/>
+    </net>
+    <net code="52" name="/D33">
+      <node ref="J2" pin="9"/>
+      <node ref="U4" pin="1"/>
+    </net>
+    <net code="53" name="/D12">
       <node ref="U1" pin="5"/>
       <node ref="J2" pin="4"/>
     </net>
-    <net code="66" name="/D2">
-      <node ref="U1" pin="1"/>
+    <net code="54" name="/D32">
+      <node ref="U3" pin="9"/>
+      <node ref="J2" pin="10"/>
+    </net>
+    <net code="55" name="/D25">
+      <node ref="U3" pin="6"/>
+      <node ref="J2" pin="8"/>
+    </net>
+    <net code="56" name="/D26">
+      <node ref="J2" pin="7"/>
+      <node ref="U3" pin="7"/>
+    </net>
+    <net code="57" name="/D27">
+      <node ref="J2" pin="6"/>
+      <node ref="U3" pin="8"/>
+    </net>
+    <net code="58" name="/D14">
+      <node ref="U1" pin="7"/>
+      <node ref="J2" pin="5"/>
+    </net>
+    <net code="59" name="/D13">
+      <node ref="J2" pin="3"/>
+      <node ref="U1" pin="6"/>
+    </net>
+    <net code="60" name="/D18">
+      <node ref="J1" pin="9"/>
+      <node ref="U1" pin="9"/>
+    </net>
+    <net code="61" name="/D15">
+      <node ref="J1" pin="3"/>
+      <node ref="U1" pin="8"/>
+    </net>
+    <net code="62" name="/D2">
       <node ref="J1" pin="4"/>
+      <node ref="U1" pin="1"/>
     </net>
-    <net code="67" name="/D4">
-      <node ref="U1" pin="3"/>
+    <net code="63" name="/D4">
       <node ref="J1" pin="5"/>
+      <node ref="U1" pin="3"/>
     </net>
-    <net code="68" name="/D5">
-      <node ref="U1" pin="4"/>
+    <net code="64" name="/D5">
       <node ref="J1" pin="8"/>
+      <node ref="U1" pin="4"/>
+    </net>
+    <net code="65" name="/D19">
+      <node ref="U3" pin="1"/>
+      <node ref="J1" pin="10"/>
+    </net>
+    <net code="66" name="/D21">
+      <node ref="U3" pin="3"/>
+      <node ref="J1" pin="11"/>
+    </net>
+    <net code="67" name="/D22">
+      <node ref="J1" pin="14"/>
+      <node ref="U3" pin="4"/>
+    </net>
+    <net code="68" name="/D23">
+      <node ref="U3" pin="5"/>
+      <node ref="J1" pin="15"/>
     </net>
   </nets>
 </export>
