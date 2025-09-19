@@ -1,0 +1,11 @@
+Comment,Designator,Footprint,LCSC
+100nF,C10,Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder,C2351189
+100uF,"C1,C2,C3,C4,C5,C6,C7,C8,C9",Capacitor_SMD:C_1210_3225Metric_Pad1.33x2.70mm_HandSolder,C90143
+Conn_02x16_Counter_Clockwise,J3,Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD,C3294474 
+Conn_01x03_Male,J4,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical_SMD_Pin1Left,C41417360
+DX07S016JA1R1500,J5,RetroBitLab:JAE_DX07S016JA1R1500,C3197885
+10K,"R1,R2,R3,R4",Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder,C620660
+5K1,"R5,R6",Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder,C2119494
+CREZ12101%,"R7,R8",Resistor_SMD:R_1210_3225Metric_Pad1.30x2.65mm_HandSolder,C2974058
+"SPST_SWITCH_SMD_4P,4.1x5.4mm",SW1,RetroBitLab:SW_DIP_SPSTx02_DSHP02TS-S,C319052
+TXS0108EPW,"U1,U3,U4",Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm,C17206
