@@ -6,7 +6,7 @@ encoding utf-8
 Sheet 1 1
 Title "ESP32 BreakoutBoard 5V"
 Date "2025-09-19"
-Rev "1.1"
+Rev "1.2"
 Comp "RetroBit Lab"
 Comment1 "Gianluca Renzi"
 Comment2 ""

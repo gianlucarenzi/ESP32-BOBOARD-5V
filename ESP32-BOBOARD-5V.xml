@@ -2,13 +2,13 @@
 <export version="D">
   <design>
     <source>/home/gianluca/Progetti-CVS/ATARI/ESP32-BOBOARD-5V/ESP32-BOBOARD-5V.sch</source>
-    <date>Fri 19 Sep 2025 03:38:28 PM CEST</date>
+    <date>Fri 19 Sep 2025 03:49:10 PM CEST</date>
     <tool>Eeschema 5.1.9+dfsg1-1+deb11u1</tool>
     <sheet number="1" name="/" tstamps="/">
       <title_block>
         <title>ESP32 BreakoutBoard 5V</title>
         <company>RetroBit Lab</company>
-        <rev>1.1</rev>
+        <rev>1.2</rev>
         <date>2025-09-19</date>
         <source>ESP32-BOBOARD-5V.sch</source>
         <comment number="1" value="Gianluca Renzi"/>
