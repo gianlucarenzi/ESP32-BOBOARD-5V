@@ -7,7 +7,7 @@
       "Application": "Pcbnew",
       "Version":     "5.1.9+dfsg1-1+deb11u1"
     },
-    "CreationDate":  "2025-09-19T12:14:10+02:00"
+    "CreationDate":  "2025-09-19T15:38:10+02:00"
   },
   "GeneralSpecs":
   {
@@ -15,7 +15,7 @@
     {
       "Name": "ESP32-BOBOARD-5V",
       "GUID": "45535033-322d-4424-9f42-4f4152442d35",
-      "Revision": "rev?"
+      "Revision": "PCB_V1.1"
     },
     "Size":
     {
