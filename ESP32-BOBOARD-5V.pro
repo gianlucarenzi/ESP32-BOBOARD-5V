@@ -1,4 +1,4 @@
-update=Wed 23 Jul 2025 08:28:47 AM CEST
+update=Fri 19 Sep 2025 11:47:36 AM CEST
 version=1
 last_client=kicad
 [general]
@@ -25,7 +25,7 @@ ERC_TestSimilarLabels=1
 [pcbnew]
 version=1
 PageLayoutDescrFile=
-LastNetListRead=
+LastNetListRead=ESP32-BOBOARD-5V.net
 CopperLayerCount=4
 BoardThickness=1.6
 AllowMicroVias=0
@@ -78,7 +78,7 @@ OthersTextUpright=1
 SolderMaskClearance=0.09999999999999999
 SolderMaskMinWidth=0
 SolderPasteClearance=0
-SolderPasteRatio=-0
+SolderPasteRatio=0
 [pcbnew/Layer.F.Cu]
 Name=F.Cu
 Type=0
