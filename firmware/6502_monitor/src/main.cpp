@@ -451,7 +451,7 @@ void setup(void)
 
 	io_conf.pin_bit_mask = 0; // Reset pin_bit_mask
 	io_conf.pin_bit_mask |= (1ULL << PIN_CCTL);
-	io_conf.pin_bit_mask |= (1ULL << PIN_D1XX)
+	io_conf.pin_bit_mask |= (1ULL << PIN_D1XX);
 	io_conf.mode = GPIO_MODE_INPUT;
 	gpio_config(&io_conf);
 #endif
@@ -632,18 +632,31 @@ void MonitorTask(void *pvParameters)
 				gpio_set_level(PIN_EXSEL, 0); // Set EXSEL low for accessing external PBI memory
 			#endif
 
-				// Shadow RAM D600-D7FF
+				// Shadow RAM D600-D6FF 256 bytes
 				if (rw)
 				{
 					// CPU reads from shadow RAM
-					uint8_t data = ram_d600[address - 0xD600];
-					set_data_bus_direction(GPIO_MODE_OUTPUT);
-					write_data_bus(data);
-					// wait for PHI2 low
-					while ( read_gpio_level(PIN_PHI2) )
-						;;
-					set_data_bus_direction(GPIO_MODE_INPUT);
-					serialPrintQueue(ANSI_YELLOW "PBI Shadow RAM: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
+					if ((address - 0xD600) <= 0xFF) // 256 bytes window
+					{
+						uint8_t data = ram_d600[address - 0xD600];
+						set_data_bus_direction(GPIO_MODE_OUTPUT);
+						write_data_bus(data);
+						// wait for PHI2 low
+						while ( read_gpio_level(PIN_PHI2) )
+							;;
+						set_data_bus_direction(GPIO_MODE_INPUT);
+						serialPrintQueue(ANSI_YELLOW "PBI Shadow RAM: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
+					}
+					else
+					{
+						set_data_bus_direction(GPIO_MODE_OUTPUT);
+						write_data_bus(0xEA); // 'NOP'
+						// wait for PHI2 low
+						while ( read_gpio_level(PIN_PHI2) )
+							;;
+						set_data_bus_direction(GPIO_MODE_INPUT);
+						serialPrintQueue(ANSI_YELLOW "PBI Shadow RAM $D7xx: Sent $EA (NOP) from $\%04X to CPU????\n" ANSI_RESET, address);
+					}
 				}
 				else
 				{
