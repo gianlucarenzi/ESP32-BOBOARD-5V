@@ -2,6 +2,13 @@
 
 **ESP32 NodeMCU 5V Tolerant Breakout Board per Monitoraggio Bus 6502**
 
+## 🌐 Language / Lingua
+
+[![🇮🇹 Italiano](https://img.shields.io/badge/🇮🇹-Italiano-green?style=for-the-badge)](README.md)
+[![🇺🇸 English](https://img.shields.io/badge/🇺🇸-English-blue?style=for-the-badge)](README_EN.md)
+
+---
+
 ![ESP32-BOBOARD-5V](3D/ESP32-BOBOARD-5V.png)
 
 ## 📋 Indice
@@ -362,7 +369,7 @@ flowchart TD
 
 | Operazione | Tempo | Note |
 |------------|-------|------|
-| **PHI2 Period** | ~1 MHz | Clock 6502 standard |
+| **PHI2 Period** | 1.77 MHz (PAL) / 1.79 MHz (NTSC) | Clock Atari 6502 |
 | **Address Setup** | <100ns | Prima del rising edge PHI2 |
 | **Data Setup** | <200ns | Per operazioni di write |
 | **Data Hold** | <100ns | Dopo falling edge PHI2 |
@@ -400,6 +407,7 @@ gantt
 - **Latenza risposta**: <1μs per operazioni PBI
 - **Throughput seriale**: 115200 baud per debug
 - **Utilizzo CPU**: ~80% Core 1, ~20% Core 0
+- **Compatibilità**: Atari PAL (1.77 MHz) e NTSC (1.79 MHz)
 
 ## 📁 File del Progetto
 
