@@ -16,6 +16,7 @@
 - [Panoramica del Progetto](#panoramica-del-progetto)
 - [Caratteristiche Principali](#caratteristiche-principali)
 - [Specifiche Tecniche](#specifiche-tecniche)
+- [Visualizzazione 3D](#visualizzazione-3d)
 - [Architettura Hardware](#architettura-hardware)
 - [Firmware](#firmware)
 - [Installazione e Setup](#installazione-e-setup)
@@ -100,6 +101,60 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 | **D1XX** | GPIO10 | PBI I/O space access |
 | **CCTL** | GPIO20 | Cartridge control |
 | **MPD** | GPIO7 | Math Pack ROM disable |
+
+## 🎨 Visualizzazione 3D
+
+### 📱 Viewer Online Interattivi
+
+Visualizza i modelli 3D direttamente nel browser:
+
+[![🔗 Visualizza STEP Online](https://img.shields.io/badge/🔗-Visualizza%20STEP%20Online-blue?style=for-the-badge)](https://www.online3dviewer.com/#model=https://raw.githubusercontent.com/your-repo/ESP32-BOBOARD-5V/main/3D/ESP32-BOBOARD-5V.step)
+
+[![🔗 Visualizza WRL Online](https://img.shields.io/badge/🔗-Visualizza%20WRL%20Online-green?style=for-the-badge)](https://www.online3dviewer.com/#model=https://raw.githubusercontent.com/your-repo/ESP32-BOBOARD-5V/main/3D/ESP32-BOBOARD-5V.wrl)
+
+### 📥 Download File 3D
+
+| Formato | Descrizione | Download |
+|---------|-------------|----------|
+| **STEP** | Modello CAD parametrico | [![📁 Download STEP](https://img.shields.io/badge/📁-Download%20STEP-orange?style=flat-square)](3D/ESP32-BOBOARD-5V.step) |
+| **WRL** | Modello VRML per rendering | [![📁 Download WRL](https://img.shields.io/badge/📁-Download%20WRL-purple?style=flat-square)](3D/ESP32-BOBOARD-5V.wrl) |
+
+### 🖼️ Galleria Immagini 3D
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="3D/ESP32-BOBOARD-5V.png" width="300" alt="Vista Isometrica"/>
+      <br/><b>Vista Isometrica</b>
+    </td>
+    <td align="center">
+      <img src="3D/ESP32-BOBOARD-5V_TOP.png" width="300" alt="Vista Superiore"/>
+      <br/><b>Vista Superiore</b>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="3D/ESP32-BOBOARD-5V_BOTTOM.png" width="300" alt="Vista Inferiore"/>
+      <br/><b>Vista Inferiore</b>
+    </td>
+    <td align="center">
+      <img src="schematics/ESP32-BOBOARD-5V.pdf" width="300" alt="Schema Elettrico"/>
+      <br/><b><a href="schematics/ESP32-BOBOARD-5V.pdf">📄 Schema Elettrico</a></b>
+    </td>
+  </tr>
+</table>
+
+### 🛠️ Software Consigliati per Visualizzazione
+
+| Software | Formato | Piattaforma | Gratuito |
+|----------|---------|-------------|----------|
+| **FreeCAD** | STEP, WRL | Windows, Linux, macOS | ✅ |
+| **Fusion 360** | STEP | Windows, macOS | ✅ (Personal) |
+| **Blender** | WRL | Windows, Linux, macOS | ✅ |
+| **MeshLab** | WRL | Windows, Linux, macOS | ✅ |
+| **Online 3D Viewer** | STEP, WRL | Browser | ✅ |
+
+---
 
 ## 🏗️ Architettura Hardware
 
