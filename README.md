@@ -190,7 +190,7 @@ static inline uint16_t read_address_bus(void) {
 ### Requisiti Hardware
 - ESP32 NodeMCU (38 pin)
 - Cavo USB-C per programmazione
-- Sistema 6502 target (es. Atari 800XL)
+- Sistema 6502 target (es. Atari 130XE)
 - Connessioni bus secondo pinout
 
 ### Requisiti Software
@@ -331,25 +331,25 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A[CPU Access $D600-$D7FF] --> B{Device Selected?}
-    B -->|No| C[Ignore Access]
-    B -->|Yes| D{Read or Write?}
+    A["CPU Access D600-D7FF"] --> B{"Device Selected?"}
+    B -->|No| C["Ignore Access"]
+    B -->|Yes| D{"Read or Write?"}
     
-    D -->|Read| E[Read from Shadow RAM]
-    D -->|Write| F[Write to Shadow RAM]
+    D -->|Read| E["Read from Shadow RAM"]
+    D -->|Write| F["Write to Shadow RAM"]
     
-    E --> G{Address Range}
-    G -->|$D600-$D6FF| H[Return RAM Data]
-    G -->|$D700-$D7FF| I[Return NOP ($EA)]
+    E --> G{"Address Range"}
+    G -->|"D600-D6FF"| H["Return RAM Data"]
+    G -->|"D700-D7FF"| I["Return NOP EA"]
     
-    F --> J[Store in ram_d600 array]
+    F --> J["Store in ram_d600 array"]
     
-    H --> K[Set Data Bus Output]
+    H --> K["Set Data Bus Output"]
     I --> K
-    J --> L[Log Operation]
-    K --> M[Wait PHI2 Low]
+    J --> L["Log Operation"]
+    K --> M["Wait PHI2 Low"]
     L --> M
-    M --> N[Return to Monitor Loop]
+    M --> N["Return to Monitor Loop"]
     
     style A fill:#e1f5fe
     style B fill:#fff3e0
