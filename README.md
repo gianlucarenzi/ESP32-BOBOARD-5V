@@ -108,9 +108,13 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 
 Visualizza i modelli 3D direttamente nel browser:
 
-[![🔗 Visualizza STEP Online](https://img.shields.io/badge/🔗-Visualizza%20STEP%20Online-blue?style=for-the-badge)](https://www.online3dviewer.com/#model=https://raw.githubusercontent.com/your-repo/ESP32-BOBOARD-5V/main/3D/ESP32-BOBOARD-5V.step)
+[![🔗 Visualizza STEP su CAD Exchanger](https://img.shields.io/badge/🔗-Visualizza%20STEP%20su%20CAD%20Exchanger-blue?style=for-the-badge)](https://viewer.cadexchanger.com/)
 
-[![🔗 Visualizza WRL Online](https://img.shields.io/badge/🔗-Visualizza%20WRL%20Online-green?style=for-the-badge)](https://www.online3dviewer.com/#model=https://raw.githubusercontent.com/your-repo/ESP32-BOBOARD-5V/main/3D/ESP32-BOBOARD-5V.wrl)
+[![🔗 Visualizza su 3D Viewer Online](https://img.shields.io/badge/🔗-Visualizza%20su%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/)
+
+[![🔗 Visualizza su Autodesk Viewer](https://img.shields.io/badge/🔗-Visualizza%20su%20Autodesk%20Viewer-orange?style=for-the-badge)](https://viewer.autodesk.com/)
+
+> **💡 Istruzioni**: Clicca sui link sopra, poi carica manualmente i file STEP o WRL dalla cartella `3D/` del repository.
 
 ### 📥 Download File 3D
 
@@ -152,7 +156,9 @@ Visualizza i modelli 3D direttamente nel browser:
 | **Fusion 360** | STEP | Windows, macOS | ✅ (Personal) |
 | **Blender** | WRL | Windows, Linux, macOS | ✅ |
 | **MeshLab** | WRL | Windows, Linux, macOS | ✅ |
-| **Online 3D Viewer** | STEP, WRL | Browser | ✅ |
+| **CAD Exchanger Viewer** | STEP, WRL | Browser | ✅ |
+| **3D Viewer Online** | STEP, WRL | Browser | ✅ |
+| **Autodesk Viewer** | STEP | Browser | ✅ |
 
 ---
 

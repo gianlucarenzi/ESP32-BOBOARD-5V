@@ -108,9 +108,13 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 
 View 3D models directly in your browser:
 
-[![🔗 View STEP Online](https://img.shields.io/badge/🔗-View%20STEP%20Online-blue?style=for-the-badge)](https://www.online3dviewer.com/#model=https://raw.githubusercontent.com/your-repo/ESP32-BOBOARD-5V/main/3D/ESP32-BOBOARD-5V.step)
+[![🔗 View STEP on CAD Exchanger](https://img.shields.io/badge/🔗-View%20STEP%20on%20CAD%20Exchanger-blue?style=for-the-badge)](https://viewer.cadexchanger.com/)
 
-[![🔗 View WRL Online](https://img.shields.io/badge/🔗-View%20WRL%20Online-green?style=for-the-badge)](https://www.online3dviewer.com/#model=https://raw.githubusercontent.com/your-repo/ESP32-BOBOARD-5V/main/3D/ESP32-BOBOARD-5V.wrl)
+[![🔗 View on 3D Viewer Online](https://img.shields.io/badge/🔗-View%20on%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/)
+
+[![🔗 View on Autodesk Viewer](https://img.shields.io/badge/🔗-View%20on%20Autodesk%20Viewer-orange?style=for-the-badge)](https://viewer.autodesk.com/)
+
+> **💡 Instructions**: Click the links above, then manually upload the STEP or WRL files from the `3D/` folder of the repository.
 
 ### 📥 Download 3D Files
 
@@ -152,7 +156,9 @@ View 3D models directly in your browser:
 | **Fusion 360** | STEP | Windows, macOS | ✅ (Personal) |
 | **Blender** | WRL | Windows, Linux, macOS | ✅ |
 | **MeshLab** | WRL | Windows, Linux, macOS | ✅ |
-| **Online 3D Viewer** | STEP, WRL | Browser | ✅ |
+| **CAD Exchanger Viewer** | STEP, WRL | Browser | ✅ |
+| **3D Viewer Online** | STEP, WRL | Browser | ✅ |
+| **Autodesk Viewer** | STEP | Browser | ✅ |
 
 ---
 
