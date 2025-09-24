@@ -110,11 +110,11 @@ Visualizza i modelli 3D direttamente nel browser:
 
 [![🔗 Visualizza STEP su CAD Exchanger](https://img.shields.io/badge/🔗-Visualizza%20STEP%20su%20CAD%20Exchanger-blue?style=for-the-badge)](https://viewer.cadexchanger.com/)
 
-[![🔗 Visualizza su 3D Viewer Online](https://img.shields.io/badge/🔗-Visualizza%20su%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/)
+[![🔗 Visualizza su 3D Viewer Online](https://img.shields.io/badge/🔗-Visualizza%20su%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/?file=https://raw.githubusercontent.com/gianlucarenzi/esp32-boboard-5v/main/3D/ESP32-BOBOARD-5V.step)
 
 [![🔗 Visualizza su Autodesk Viewer](https://img.shields.io/badge/🔗-Visualizza%20su%20Autodesk%20Viewer-orange?style=for-the-badge)](https://viewer.autodesk.com/)
 
-> **💡 Istruzioni**: Clicca sui link sopra, poi carica manualmente i file STEP o WRL dalla cartella `3D/` del repository.
+
 
 ### 📥 Download File 3D
 
@@ -270,7 +270,7 @@ static inline uint16_t read_address_bus(void) {
 
 1. **Clone del repository**:
 ```bash
-git clone https://github.com/your-repo/ESP32-BOBOARD-5V.git
+git clone https://github.com/gianlucarenzi/esp32-boboard-5v.git
 cd ESP32-BOBOARD-5V/firmware/6502_monitor
 ```
 
@@ -600,7 +600,7 @@ Per segnalare problemi, utilizzare il sistema di [Issues](../../issues) includen
 
 - **Progetto**: ESP32-BOBOARD-5V
 - **Autore**: RetroBitLab
-- **Repository**: [GitHub](https://github.com/your-repo/ESP32-BOBOARD-5V)
+Repository: [GitHub](https://github.com/gianlucarenzi/esp32-boboard-5v)
 - **Documentazione**: [Wiki](../../wiki)
 
 ---
