@@ -257,6 +257,10 @@ static int debuglevel = DBG_INFO;
 #define PBI_IO            !((gpio_low >> PIN_D1XX) & 1)
 #endif
 
+// Checking functions for PHI2 Clock
+#define PHI2_IS_LOW !((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1)
+#define PHI2_IS_HIGH !(PHI2_IS_LOW)
+
 QueueHandle_t serialQueue;
 
 // Prototypes for functions
@@ -480,9 +484,8 @@ void MonitorTask(void *pvParameters)
 
 	for (;;)
 	{
-		// Rising edge of PHI2
-		while (!((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1))
-			;;
+		// Wait the rising edge of PHI2
+		while (PHI2_IS_LOW) ;;
 
 		uint32_t gpio_low = read_gpio_low();
 		uint32_t gpio_high = read_gpio_high();
@@ -500,9 +503,10 @@ void MonitorTask(void *pvParameters)
 				uint8_t data = d500[address & 0x00FF];
 				set_data_bus_direction(GPIO_MODE_OUTPUT);
 				write_data_bus(data);
+
 				// wait for PHI2 low
-				while (((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1))
-					;;
+				while (PHI2_IS_HIGH) ;;
+
 				set_data_bus_direction(GPIO_MODE_INPUT);
 				serialPrintQueue(ANSI_YELLOW "CCTL: Send $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
 			}
@@ -551,9 +555,10 @@ void MonitorTask(void *pvParameters)
 					uint8_t data = cardselected ? DEVICE_ID : 0; // Return DEVICE_ID if device is selected, otherwise 0
 					set_data_bus_direction(GPIO_MODE_OUTPUT);
 					write_data_bus(data);
+
 					// wait for PHI2 low
-					while (((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1))
-						;;
+					while (PHI2_IS_HIGH) ;;
+
 					set_data_bus_direction(GPIO_MODE_INPUT);
 					serialPrintQueue(ANSI_GREEN "PBI I/O: Sent $\%02X to CPU from $D1FF\n" ANSI_RESET, data);
 				}
@@ -606,9 +611,10 @@ void MonitorTask(void *pvParameters)
 						uint8_t data = pbi_driver[ address - 0xD800 ];
 						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(data);
+
 						// wait for PHI2 low
-						while (((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1))
-							;;
+						while (PHI2_IS_HIGH) ;;
+
 						set_data_bus_direction(GPIO_MODE_INPUT);
 						serialPrintQueue(ANSI_YELLOW "PBI ROM Driver: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
 					} // Read-Only
@@ -634,9 +640,10 @@ void MonitorTask(void *pvParameters)
 						uint8_t data = ram_d800[ address - 0xD800 ];
 						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(data);
+						
 						// wait for PHI2 low
-						while (((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1))
-							;;
+						while (PHI2_IS_HIGH) ;;
+						
 						set_data_bus_direction(GPIO_MODE_INPUT);
 						serialPrintQueue(ANSI_YELLOW "PBI ROM Driver SHADOW RAM: Sent $\%02X to $\%04X to CPU\n" ANSI_RESET, data, address);
 					}
@@ -675,9 +682,10 @@ void MonitorTask(void *pvParameters)
 						uint8_t data = ram_d600[address - 0xD600];
 						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(data);
+
 						// wait for PHI2 low
-						while (((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1))
-							;;
+						while (PHI2_IS_HIGH) ;;
+
 						set_data_bus_direction(GPIO_MODE_INPUT);
 						serialPrintQueue(ANSI_YELLOW "PBI Shadow RAM: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
 					}
@@ -686,9 +694,10 @@ void MonitorTask(void *pvParameters)
 						// from $D700-$D7FF NOP AREA
 						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(0xEA); // 'NOP'
+
 						// wait for PHI2 low
-						while (((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1))
-							;;
+						while (PHI2_IS_HIGH) ;;
+
 						set_data_bus_direction(GPIO_MODE_INPUT);
 						serialPrintQueue(ANSI_YELLOW "PBI Shadow RAM $D7xx: Sent $EA (NOP) from $\%04X to CPU????\n" ANSI_RESET, address);
 					}
