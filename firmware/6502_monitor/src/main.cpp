@@ -9,11 +9,14 @@
 
 /* ANSI Eye-Candy ;-)
  */
-#define ANSI_RED    "\x1b[31m"
-#define ANSI_GREEN  "\x1b[32m"
-#define ANSI_YELLOW "\x1b[1;33m"
-#define ANSI_BLUE   "\x1b[1;34m"
-#define ANSI_RESET  "\x1b[0m"
+#define ANSI_RED     "\x1b[31m"
+#define ANSI_GREEN   "\x1b[32m"
+#define ANSI_YELLOW  "\x1b[1;33m"
+#define ANSI_BLUE    "\x1b[1;34m"
+#define ANSI_MAGENTA "\x1b[1;35m"
+#define ANSI_CYAN    "\x1b[1;36m"
+#define ANSI_WHITE   "\x1b[1;37m"
+#define ANSI_RESET   "\x1b[0m"
 
 #define TEST
 #undef TEST
@@ -60,7 +63,7 @@ void setup(void)
 	Serial.println("Configurazione delle coppie:");
 	for (int i = 0; i < numPairs; i++)
 	{
-		Serial.print(ANSI_YELLOW "  Pair "); Serial.print(i + 1); Serial.print(": Output GPIO"); Serial.print(testPairs[i][0]);
+		Serial.print(ANSI_MAGENTA "  Pair "); Serial.print(i + 1); Serial.print(": Output GPIO"); Serial.print(testPairs[i][0]);
 		Serial.print(" <-> Input GPIO" ANSI_RESET); Serial.println(testPairs[i][1]);
 	}
 	Serial.println("---------------------------------------");
@@ -83,7 +86,7 @@ void loop(void)
 			int outputPin = testPairs[i][0];
 			int inputPin = testPairs[i][1];
 
-			Serial.print(ANSI_YELLOW "Testing Pair: Output GPIO");
+			Serial.print(ANSI_WHITE "Testing Pair: Output GPIO");
 			Serial.print(outputPin);
 			Serial.print(" <-> Input GPIO");
 			Serial.print(inputPin);
@@ -296,7 +299,7 @@ void serialPrintQueue(const char* fmt, ...)
 	}
 	else
 	{
-		Serial.println("Serial queue not initialized!");
+		Serial.println(ANSI_RESET "Serial queue not initialized!");
 	}
 }
 
@@ -528,14 +531,14 @@ void MonitorTask(void *pvParameters)
 			if (addressLSB == 0xFF) // Device selection address $D1FF
 			{
 				// Accessing the Device Selection Register $D1FF
-				serialPrintQueue(ANSI_BLUE "PBI I/O: Accessing Device Selection Register $D1FF\n" ANSI_RESET);
+				serialPrintQueue(ANSI_MAGENTA "PBI I/O: Accessing Device Selection Register $D1FF\n" ANSI_RESET);
 				// 6502 CPU writes to PBI I/O to select device
 				if (!rw)
 				{
 					uint8_t device = read_data_bus(gpio_low);
 					if (device == DEVICE_ID)
 					{
-						serialPrintQueue(ANSI_BLUE "PBI I/O: Device $\%02X selected\n" ANSI_RESET, device);
+						serialPrintQueue(ANSI_MAGENTA "PBI I/O: Device $\%02X selected\n" ANSI_RESET, device);
 						cardselected = 1;
 						fast_gpio_set_level(PIN_CS, 0); // Set CS low for PBI I/O
 					}
@@ -560,7 +563,7 @@ void MonitorTask(void *pvParameters)
 					while (PHI2_IS_HIGH) ;;
 
 					set_data_bus_direction(GPIO_MODE_INPUT);
-					serialPrintQueue(ANSI_GREEN "PBI I/O: Sent $\%02X to CPU from $D1FF\n" ANSI_RESET, data);
+					serialPrintQueue(ANSI_MAGENTA "PBI I/O: Sent $\%02X to CPU from $D1FF\n" ANSI_RESET, data);
 				}
 			}
 			else
@@ -576,7 +579,7 @@ void MonitorTask(void *pvParameters)
 					if (addressLSB >= 00 && addressLSB <= 0xF0)
 					{
 						// Sniffing I/O Space registers
-						serialPrintQueue(ANSI_YELLOW "PBI Device Registers: Read or Write @ $\%04X address\n" ANSI_RESET, address);
+						serialPrintQueue(ANSI_MAGENTA "PBI Device Registers: Read or Write @ $\%04X address\n" ANSI_RESET, address);
 					}
 					else
 					{
@@ -601,7 +604,7 @@ void MonitorTask(void *pvParameters)
 			#if PROTOTYPE == 0 
 				fast_gpio_set_level(PIN_MPD, 0); // Set MPD low to indicate Math Pack ROM Disable
 			#endif
-				serialPrintQueue(ANSI_YELLOW "EXSEL: Set to external memory, MPD: Disabled" ANSI_RESET);
+				serialPrintQueue(ANSI_CYAN "EXSEL: Set to external memory, MPD: Disabled" ANSI_RESET);
 				// ROM (READ ONLY) from $D800-$D8FF (256 bytes for device driver)
 				if (address >= 0xD800 && address <= 0xD8FF)
 				{
@@ -616,7 +619,7 @@ void MonitorTask(void *pvParameters)
 						while (PHI2_IS_HIGH) ;;
 
 						set_data_bus_direction(GPIO_MODE_INPUT);
-						serialPrintQueue(ANSI_YELLOW "PBI ROM Driver: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
+						serialPrintQueue(ANSI_CYAN "PBI ROM Driver: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
 					} // Read-Only
 				}
 				else
@@ -632,7 +635,7 @@ void MonitorTask(void *pvParameters)
 						uint8_t data = read_data_bus(gpio_low);
 						// Store the data in the shadow RAM of PBI OSROM Driver from D900 to DFFF!
 						ram_d800[address - 0xD800] = data;
-						serialPrintQueue(ANSI_YELLOW "PBI OSROM Driver: Received $\%02X to $\%04X from CPU. Shadow RAM\n" ANSI_RESET, data, address);
+						serialPrintQueue(ANSI_CYAN "PBI OSROM Driver: Received $\%02X to $\%04X from CPU. Shadow RAM\n" ANSI_RESET, data, address);
 					}
 					else
 					{
@@ -645,7 +648,7 @@ void MonitorTask(void *pvParameters)
 						while (PHI2_IS_HIGH) ;;
 						
 						set_data_bus_direction(GPIO_MODE_INPUT);
-						serialPrintQueue(ANSI_YELLOW "PBI ROM Driver SHADOW RAM: Sent $\%02X to $\%04X to CPU\n" ANSI_RESET, data, address);
+						serialPrintQueue(ANSI_CYAN "PBI ROM Driver SHADOW RAM: Sent $\%02X to $\%04X to CPU\n" ANSI_RESET, data, address);
 					}
 
 					// Restore all MPD and EXSEL pins...
@@ -687,7 +690,7 @@ void MonitorTask(void *pvParameters)
 						while (PHI2_IS_HIGH) ;;
 
 						set_data_bus_direction(GPIO_MODE_INPUT);
-						serialPrintQueue(ANSI_YELLOW "PBI Shadow RAM: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
+						serialPrintQueue(ANSI_WHITE "PBI Shadow RAM: Sent $\%02X from $\%04X to CPU\n" ANSI_RESET, data, address);
 					}
 					else
 					{
@@ -699,7 +702,7 @@ void MonitorTask(void *pvParameters)
 						while (PHI2_IS_HIGH) ;;
 
 						set_data_bus_direction(GPIO_MODE_INPUT);
-						serialPrintQueue(ANSI_YELLOW "PBI Shadow RAM $D7xx: Sent $EA (NOP) from $\%04X to CPU????\n" ANSI_RESET, address);
+						serialPrintQueue(ANSI_WHITE "PBI Shadow RAM $D7xx: Sent $EA (NOP) from $\%04X to CPU????\n" ANSI_RESET, address);
 					}
 				}
 				else
@@ -708,7 +711,7 @@ void MonitorTask(void *pvParameters)
 					set_data_bus_direction(GPIO_MODE_INPUT);
 					uint8_t data = read_data_bus(gpio_low);
 					ram_d600[address - 0xD600] = data;
-					serialPrintQueue(ANSI_YELLOW "Shadow RAM: Received $\%02X to $\%04X from CPU\n" ANSI_RESET, data, address);
+					serialPrintQueue(ANSI_WHITE "Shadow RAM: Received $\%02X to $\%04X from CPU\n" ANSI_RESET, data, address);
 				}
 
 				// Restore EXSEL pin
