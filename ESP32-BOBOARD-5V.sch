@@ -5,7 +5,7 @@ $Descr A4 11693 8268
 encoding utf-8
 Sheet 1 1
 Title "ESP32 BreakoutBoard 5V"
-Date "2025-09-19"
+Date "2025-10-30"
 Rev "1.2"
 Comp "RetroBit Lab"
 Comment1 "Gianluca Renzi"
@@ -844,17 +844,6 @@ Wire Wire Line
 	9725 5350 9950 5350
 Wire Wire Line
 	9725 5250 9950 5250
-$Comp
-L power:+5V #PWR0127
-U 1 1 68C2BC13
-P 10325 4225
-F 0 "#PWR0127" H 10325 4075 50  0001 C CNN
-F 1 "+5V" H 10340 4398 50  0000 C CNN
-F 2 "" H 10325 4225 50  0001 C CNN
-F 3 "" H 10325 4225 50  0001 C CNN
-	1    10325 4225
-	1    0    0    -1  
-$EndComp
 Wire Wire Line
 	9725 4350 10325 4350
 Wire Wire Line
@@ -1034,12 +1023,12 @@ NoConn ~ 8150 1650
 $Comp
 L power:+5V #PWR04
 U 1 1 68959F72
-P 7850 1810
-F 0 "#PWR04" H 7850 1660 50  0001 C CNN
-F 1 "+5V" H 7865 1983 50  0000 C CNN
-F 2 "" H 7850 1810 50  0001 C CNN
-F 3 "" H 7850 1810 50  0001 C CNN
-	1    7850 1810
+P 7640 1745
+F 0 "#PWR04" H 7640 1595 50  0001 C CNN
+F 1 "+5V" H 7640 1885 50  0000 C CNN
+F 2 "" H 7640 1745 50  0001 C CNN
+F 3 "" H 7640 1745 50  0001 C CNN
+	1    7640 1745
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
@@ -1275,8 +1264,6 @@ Wire Wire Line
 	8035 1850 7850 1850
 Connection ~ 8035 1850
 Connection ~ 7850 1850
-Wire Wire Line
-	7850 1810 7850 1850
 Wire Wire Line
 	5775 3225 5775 3275
 Connection ~ 5775 3275
@@ -1535,4 +1522,30 @@ F 4 "C84376" H 4700 5405 50  0001 C CNN "LCSC"
 	1    4700 5405
 	-1   0    0    1   
 $EndComp
+Wire Wire Line
+	7850 1780 7850 1850
+$Comp
+L power:PWR_FLAG #FLG0103
+U 1 1 69059A03
+P 7490 1795
+F 0 "#FLG0103" H 7490 1870 50  0001 C CNN
+F 1 "PWR_FLAG" H 7490 1968 50  0000 C CNN
+F 2 "" H 7490 1795 50  0001 C CNN
+F 3 "~" H 7490 1795 50  0001 C CNN
+	1    7490 1795
+	-1   0    0    1   
+$EndComp
+Wire Wire Line
+	7490 1795 7490 1780
+Wire Wire Line
+	7490 1780 7640 1780
+Wire Wire Line
+	7640 1745 7640 1780
+Connection ~ 7640 1780
+Wire Wire Line
+	7640 1780 7850 1780
+Text Label 7850 1780 0    50   ~ 0
+5VCC
+Text Label 10325 4225 0    50   ~ 0
+5VCC
 $EndSCHEMATC

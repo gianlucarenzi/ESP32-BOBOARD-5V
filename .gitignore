@@ -1,2 +1,5 @@
 /ESP32-BOBOARD-5V-cache.lib
 /ESP32-BOBOARD-5V.sch-bak
+*report*.txt
+*.csv.backup_*
+*.kicad_pcb.backup_*
