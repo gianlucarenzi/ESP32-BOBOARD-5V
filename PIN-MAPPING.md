@@ -252,40 +252,84 @@ and GPIO0 has a pull-up. Test carefully before relying on them.
 
 ---
 
-## J3 Physical Pinout (current PCB v1.x)
+## High-Speed Bus Mapping (XL/XE Default) — Speed Focused
+
+This layout is the **default** for the ESP32-BOBOARD-5V. It is compatible with both **Atari XL (PBI)** and **Atari XE (ECI + CART)** interfaces. It optimizes for maximum execution speed by grouping all critical signals in the first 32 bits of the GPIO register (`GPIO_IN_REG`).
+
+### Design goals
+
+1. **Fast Decision:** PHI2, R/~W, CCTL, and ~D1XX are all in `GPIO_IN_REG`. A single read and mask determines if the bus cycle is relevant.
+2. **Fast Address:** A0–A5 are contiguous (bits 0–5). A6–A7 are adjacent (bits 21–22). Reassembling A0–A7 takes only 2–3 instructions.
+3. **Contiguous Data:** D0–D7 remain on GPIO 12–19 for single-byte I/O.
+4. **Full Level-Shifter Utilization:** 24 channels used across 3 ICs.
+
+### Pin assignment (Default)
+
+| IC | ESP32 GPIO | Register | bit | Function | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **U1** | **12–19** | **IN_REG** | **12–19** | **D0–D7** | Data Bus (Bidirectional) |
+| **U2** | **0, 2–5** | **IN_REG** | **0, 2–5** | **A0, A2–A4** | Address LSB |
+| **U2** | **3** | **IN_REG** | **3** | **A1** | Replaces RX0 |
+| **U2** | **21–22** | **IN_REG** | **21–22** | **A5–A6** | Address LSB |
+| **U3** | **23** | **IN_REG** | **23** | **PHI2** | Clock (Input) |
+| **U3** | **25** | **IN_REG** | **25** | **R/~W** | Read/Write (Input) |
+| **U3** | **26** | **IN_REG** | **26** | **CCTL** | $D5xx Decoded (Input) |
+| **U3** | **27** | **IN_REG** | **27** | **~D1XX** | $D1xx Decoded (Input) |
+| **U3** | **32** | **OUT_REG**| **0** | **~MPD** | Math Pack Disable (Output) |
+| **U3** | **33** | **OUT_REG**| **1** | **~EXTSEL**| External Select (Output) |
+| **U3** | **34–36** | **IN1_REG**| **2–4** | **A7–A9** | Address MSB (Input) |
+| **UART**| **1** | — | — | **TX0** | **Free for printf** |
+
+### Performance Optimization
+
+```c
+// ONE read to get everything needed for the bus decision
+uint32_t reg = REG_READ(GPIO_IN_REG);
+
+// Wait for PHI2 high (bit 23)
+while (!(reg & 0x00800000)) reg = REG_READ(GPIO_IN_REG);
+
+// Check CCTL (bit 26) or D1XX (bit 27)
+if (!(reg & 0x0C000000)) {
+    // Reassemble A0-A6 from reg (A0:0, A2:2, A1:3, A3:4, A4:5, A5:21, A6:22)
+    uint8_t addr = (reg & 0x01) | (reg & 0x04) | ((reg & 0x08) >> 2) | ...;
+    // (see read_address_bus in main.cpp for full logic)
+}
+```
+
+---
+
+## J3 Physical Pinout (High-Speed XL/XE)
 
 Pins not listed here carry +5V, +3.3V, GND, or are NC.
 
-| J3 pin | Net (schematic) | ESP32 GPIO | Atari signal (v1.x) | Atari signal (v2.x) |
-| ------ | --------------- | ---------- | ------------------- | ------------------- |
-| 1  | mD2  | GPIO2  | A8    | A2              |
-| 2  | mD4  | GPIO4  | D0    | A4              |
-| 3  | mD5  | GPIO5  | A9    | A5              |
-| 4  | mD12 | GPIO12 | A10   | **D0**          |
-| 5  | mD13 | GPIO13 | D1    | **D1**          |
-| 6  | mD14 | GPIO14 | D2    | **D2**          |
-| 7  | mD15 | GPIO15 | A11   | **D3**          |
-| 8  | mD18 | GPIO18 | D5    | **D5**          |
-| 9  | mD19 | GPIO19 | D6    | **D6**          |
-| 10 | mD21 | GPIO21 | A2    | A6              |
-| 11 | mD22 | GPIO22 | D7    | **D7**          |
-| 12 | mD23 | GPIO23 | PHI2  | PHI2 (unchanged)|
-| 13 | mD25 | GPIO25 | R/~W  | R/~W (unchanged)|
-| 14 | mD26 | GPIO26 | ~CS   | **~MPD**        |
-| 15 | mD27 | GPIO27 | A3    | **~EXSEL**      |
-| 16 | mD32 | GPIO32 | A5    | A8              |
-| 17 | mD33 | GPIO33 | A4    | A9              |
-| 18 | mD34 | GPIO34 | A12   | **CCTL**        |
-| 19 | mD35 | GPIO35 | A13   | **~D1XX**       |
-| 20 | mVP  | GPIO36 | A14   | A10 (optional)  |
-| 21 | mVN  | GPIO39 | A15   | A11 (optional)  |
-| 22 | mRX2 | GPIO16 | D3    | **D4**          |
-| 23 | mTX2 | GPIO17 | D4    | **D4** (see ¹)  |
-| 24 | NC   | —      | —     | **A0** (new)    |
-| 25 | NC   | —      | —     | **A1** (new)    |
+| J3 pin | Net | ESP32 GPIO | Atari signal | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | mD0 | GPIO12 | **D0** | Data |
+| 2 | mD1 | GPIO13 | **D1** | |
+| 3 | mD2 | GPIO14 | **D2** | |
+| 4 | mD3 | GPIO15 | **D3** | |
+| 5 | mD4 | GPIO16 | **D4** | |
+| 6 | mD5 | GPIO17 | **D5** | |
+| 7 | mD6 | GPIO18 | **D6** | |
+| 8 | mD7 | GPIO19 | **D7** | |
+| 9 | mA0 | GPIO0 | **A0** | Strapping pin (A0) |
+| 10 | mA1 | GPIO3 | **A1** | RX0 pin used for A1 |
+| 11 | mA2 | GPIO2 | **A2** | |
+| 12 | mA3 | GPIO4 | **A3** | |
+| 13 | mA4 | GPIO5 | **A4** | |
+| 14 | mA5 | GPIO21 | **A5** | |
+| 15 | mA6 | GPIO22 | **A6** | |
+| 16 | mA7 | GPIO34 | **A7** | IN-only |
+| 17 | mA8 | GPIO35 | **A8** | IN-only |
+| 18 | mA9 | GPIO36 | **A9** | IN-only |
+| 19 | mPHI | GPIO23 | **PHI2** | Clock |
+| 20 | mRW | GPIO25 | **R/~W** | |
+| 21 | mCCT | GPIO26 | **CCTL** | $D5xx |
+| 22 | mD1X | GPIO27 | **~D1XX** | $D1xx |
+| 23 | mMPD | GPIO32 | **~MPD** | Output |
+| 24 | mEXT | GPIO33 | **~EXTSEL**| Output |
+| 25 | mTX0 | GPIO1 | **TX0** | **Serial Debug Out** |
+| 26 | mCS | GPIO26 | **~CS** | shared or optional |
 
-⁽¹⁾ In v2.x both RX2/TX2 (GPIO16/17) carry data bits D4/D5; UART2 must not be
-     initialised during bus monitoring.
-
-> **Bold** entries in the v2.x column differ from v1.x or are newly added.  
-> J3 pins 24/25 are currently NC and require new PCB traces to be wired in v2.x.
+> **Note**: This physical mapping requires the specific PCB layout of the ESP32-BOBOARD-5V v2.x.
