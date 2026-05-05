@@ -261,7 +261,7 @@ static int debuglevel = DBG_INFO;
 #endif
 
 // Checking functions for PHI2 Clock
-#define PHI2_IS_LOW !((REG_READ(GPIO_IN1_REG) >> PIN_PHI2) & 1)
+#define PHI2_IS_LOW !((REG_READ(GPIO_IN_REG) >> PIN_PHI2) & 1)
 #define PHI2_IS_HIGH !(PHI2_IS_LOW)
 
 QueueHandle_t serialQueue;
@@ -295,7 +295,7 @@ void serialPrintQueue(const char* fmt, ...)
 
 	if (serialQueue != NULL)
 	{
-		xQueueSend(serialQueue, buf, portMAX_DELAY);
+		xQueueSend(serialQueue, buf, 0);
 	}
 	else
 	{
@@ -306,12 +306,12 @@ void serialPrintQueue(const char* fmt, ...)
 // Funzioni ottimizzate per lettura GPIO
 inline uint32_t read_gpio_low(void)
 {
-	return REG_READ(GPIO_IN1_REG);  // GPIO 0-31
+	return REG_READ(GPIO_IN_REG);   // GPIO 0-31
 }
 
 inline uint32_t read_gpio_high(void)
 {
-	return REG_READ(GPIO_IN_REG);   // GPIO 32-39
+	return REG_READ(GPIO_IN1_REG);  // GPIO 32-39
 }
 
 static inline uint16_t read_address_bus(uint32_t gpio_low, uint32_t gpio_high)
@@ -377,21 +377,30 @@ static inline void set_data_bus_direction(gpio_mode_t mode)
 	}
 }
 
+static uint32_t data_set_lut[256];
+
+static void precompute_data_lut(void)
+{
+	const uint32_t pin_bits[8] = {
+		(1U << PIN_D0), (1U << PIN_D1), (1U << PIN_D2), (1U << PIN_D3),
+		(1U << PIN_D4), (1U << PIN_D5), (1U << PIN_D6), (1U << PIN_D7)
+	};
+	for (int v = 0; v < 256; v++) {
+		uint32_t m = 0;
+		for (int b = 0; b < 8; b++) {
+			if ((v >> b) & 1) m |= pin_bits[b];
+		}
+		data_set_lut[v] = m;
+	}
+}
+
 static inline void write_data_bus(uint8_t value)
 {
-	const uint32_t mask = (1 << PIN_D0) | (1 << PIN_D1) | (1 << PIN_D2) | (1 << PIN_D3) |
-							(1 << PIN_D4) | (1 << PIN_D5) | (1 << PIN_D6) | (1 << PIN_D7);
-	uint32_t set_mask = 0;
-	if ((value >> 0) & 1) set_mask |= (1 << PIN_D0);
-	if ((value >> 1) & 1) set_mask |= (1 << PIN_D1);
-	if ((value >> 2) & 1) set_mask |= (1 << PIN_D2);
-	if ((value >> 3) & 1) set_mask |= (1 << PIN_D3);
-	if ((value >> 4) & 1) set_mask |= (1 << PIN_D4);
-	if ((value >> 5) & 1) set_mask |= (1 << PIN_D5);
-	if ((value >> 6) & 1) set_mask |= (1 << PIN_D6);
-	if ((value >> 7) & 1) set_mask |= (1 << PIN_D7);
+	const uint32_t full_mask = (1U << PIN_D0) | (1U << PIN_D1) | (1U << PIN_D2) | (1U << PIN_D3) |
+	                           (1U << PIN_D4) | (1U << PIN_D5) | (1U << PIN_D6) | (1U << PIN_D7);
+	uint32_t set_mask = data_set_lut[value];
 	GPIO.out_w1ts = set_mask;
-	GPIO.out_w1tc = mask & ~set_mask;
+	GPIO.out_w1tc = full_mask & ~set_mask;
 }
 
 static inline void fast_gpio_set_level(gpio_num_t pin, uint32_t level)
@@ -423,10 +432,11 @@ static inline void fast_gpio_set_level(gpio_num_t pin, uint32_t level)
 void setup(void)
 {
 	Serial.begin(115200);
+	precompute_data_lut();
 
 	serialQueue = xQueueCreate(SERIAL_QUEUE_LENGTH, SERIAL_MSG_SIZE);
 	xTaskCreatePinnedToCore(SerialTask, "SerialTask", 2048, NULL, 1, NULL, 0); // Create the serial task on core 0
-	xTaskCreatePinnedToCore(MonitorTask, "MonitorTask", 2048, NULL, 1, NULL, 1); // Create the monitor task on core 1
+	xTaskCreatePinnedToCore(MonitorTask, "MonitorTask", 4096, NULL, 10, NULL, 1); // Create the monitor task on core 1
 
 	// Configurazione pin
 	gpio_config_t io_conf = {};
@@ -497,6 +507,7 @@ void MonitorTask(void *pvParameters)
 		bool rw = (gpio_low >> PIN_RW) & 1;
 
 		// Read all remaining signals here to minimize timing issues
+		// Address ranges are mutually exclusive — use else-if for early exit
 		// CCTL
 		if(CARTRIDGE_CONTROL)
 		{
@@ -504,8 +515,8 @@ void MonitorTask(void *pvParameters)
 			{
 				// 6502 CPU is LD[X/Y/A] from memory @ $D5xx
 				uint8_t data = d500[address & 0x00FF];
-				set_data_bus_direction(GPIO_MODE_OUTPUT);
 				write_data_bus(data);
+				set_data_bus_direction(GPIO_MODE_OUTPUT);
 
 				// wait for PHI2 low
 				while (PHI2_IS_HIGH) ;;
@@ -524,7 +535,7 @@ void MonitorTask(void *pvParameters)
 		}
 
 		// PBI I/O Management
-		if(PBI_IO)
+		else if(PBI_IO)
 		{
 			uint8_t addressLSB = address & 0x00FF; // LSB of the address
 
@@ -556,8 +567,8 @@ void MonitorTask(void *pvParameters)
 
 					// Is it a valid read operation?
 					uint8_t data = cardselected ? DEVICE_ID : 0; // Return DEVICE_ID if device is selected, otherwise 0
-					set_data_bus_direction(GPIO_MODE_OUTPUT);
 					write_data_bus(data);
+					set_data_bus_direction(GPIO_MODE_OUTPUT);
 
 					// wait for PHI2 low
 					while (PHI2_IS_HIGH) ;;
@@ -576,7 +587,7 @@ void MonitorTask(void *pvParameters)
 					// Accessing PBI I/O registers only if a device is selected
 					// Valid PBI I/O registers are $D100 to $D1F0
 					// $D1F1 to $D1FE are reserved/unknown
-					if (addressLSB >= 00 && addressLSB <= 0xF0)
+					if (addressLSB <= 0xF0)
 					{
 						// Sniffing I/O Space registers
 						serialPrintQueue(ANSI_MAGENTA "PBI Device Registers: Read or Write @ $\%04X address\n" ANSI_RESET, address);
@@ -597,7 +608,7 @@ void MonitorTask(void *pvParameters)
 		}
 
 		// EXSEL e MPD Management
-		if(address >= 0xD800 && address <= 0xDFFF)
+		else if(address >= 0xD800 && address <= 0xDFFF)
 		{
 			if (cardselected)
 			{
@@ -612,8 +623,8 @@ void MonitorTask(void *pvParameters)
 					{
 						// $D800-$DFFF: CPU read from PBI Driver and lower MPD
 						uint8_t data = pbi_driver[ address - 0xD800 ];
-						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(data);
+						set_data_bus_direction(GPIO_MODE_OUTPUT);
 
 						// wait for PHI2 low
 						while (PHI2_IS_HIGH) ;;
@@ -641,8 +652,8 @@ void MonitorTask(void *pvParameters)
 					{
 						// Read from shadow RAM $D900-$DFFF (2K - 256bytes)
 						uint8_t data = ram_d800[ address - 0xD800 ];
-						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(data);
+						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						
 						// wait for PHI2 low
 						while (PHI2_IS_HIGH) ;;
@@ -662,8 +673,8 @@ void MonitorTask(void *pvParameters)
 
 		// D600-D7FF Shadow RAM
 		// This is a special area for shadow RAM, used by the 6502 CPU
-		// only if there is a PBI card connected and initialized 
-		if (address >= 0xD600 && address <= 0xD7FF)
+		// only if there is a PBI card connected and initialized
+		else if (address >= 0xD600 && address <= 0xD7FF)
 		{
 			// Accessing the Shadow RAM Area D6xx-D7xx only if a device card is
 			// selected by PBI bus protocol
@@ -683,8 +694,8 @@ void MonitorTask(void *pvParameters)
 					if ((address - 0xD600) <= 0xFF) // 256 bytes window
 					{
 						uint8_t data = ram_d600[address - 0xD600];
-						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(data);
+						set_data_bus_direction(GPIO_MODE_OUTPUT);
 
 						// wait for PHI2 low
 						while (PHI2_IS_HIGH) ;;
@@ -695,8 +706,8 @@ void MonitorTask(void *pvParameters)
 					else
 					{
 						// from $D700-$D7FF NOP AREA
-						set_data_bus_direction(GPIO_MODE_OUTPUT);
 						write_data_bus(0xEA); // 'NOP'
+						set_data_bus_direction(GPIO_MODE_OUTPUT);
 
 						// wait for PHI2 low
 						while (PHI2_IS_HIGH) ;;
