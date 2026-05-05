@@ -547,11 +547,6 @@ ESP32-BOBOARD-5V/
 3. **Test**: Continuity check and functional test
 4. **Programming**: Upload test firmware
 
-### Versions
-
-- **v1.1**: Prototype version (limited pins)
-- **v1.2**: Final version (all pins available)
-
 ## 📜 License
 
 This project is released under **GNU General Public License v3.0**.
