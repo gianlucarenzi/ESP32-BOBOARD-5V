@@ -67,6 +67,45 @@ Quando il bit torna a `0`, `cSIDLight::reset()` silenzia le voci e azzera lo sta
 | $15–$17 | FC Lo/Hi, Res/Filt | Filtro (non emulato in Light) |
 | $18 | MODE/VOL | Bit 3:0 = volume master (0–15 → ±0–120 DAC) |
 
+### Handler PBI `I:` lato Atari
+
+Il ROM handler in `6502/src/pbi-driver.s` registra la periferica Atari **`I:`**.
+Le routine `GETBYT` e `PUTBYT` usano l'**accumulatore** per il byte trasferito e
+`ICAX1,X` come **offset del registro SID**.
+
+| Routine | Parametri | Comportamento |
+|:---|:---|:---|
+| `PUTBYT` | `A` = valore, `ICAX1,X` = offset registro | scrive `A` in `$D100 + offset` |
+| `GETBYT` | `ICAX1,X` = offset registro | legge `$D100 + offset` e restituisce il valore in `A` |
+| `CLOSE` | nessuno | silenzia il SID azzerando l'intera finestra `$D100-$D11F` |
+
+La routine `SILENCE` azzera **32 registri** (`$00-$1F`) per allinearsi alla
+finestra completa esposta dal firmware ESP32 (`SID_NUM_REGS = $20`).
+
+### Formato dump compatibile con `sid-arduino-lib`
+
+I file dump generati per l'esempio
+`daitangio/sid-arduino-lib/examples/sid_player/sid_player.ino` non contengono
+32 byte per frame ma 25.
+
+1. scrive solo i registri **`0..24`**
+2. avanza di **25 byte per frame**
+3. attende circa **50 Hz** (`delay(19)`) tra un frame e il successivo
+
+Quindi il formato corretto dei dump `_dmp.h`/binari compatibili e':
+
+- **1 frame = 25 byte**
+- **registri scritti = 0..24**
+- **timing = 1 frame ogni tick video circa**
+
+Per questo motivo gli esempi in:
+
+- `examples/atari-basic/sid_dump_player.bas`
+- `examples/cc65/sid_dump_player.c`
+
+trattano il file come una sequenza di frame da **25 byte**, impostano
+`ICAX1`/`aux1` con il registro `0..24` e aspettano un tick video tra i frame.
+
 ---
 
 ## 2026-05-06 (rev 1): Trasformazione in Sidboard
@@ -146,4 +185,3 @@ Il segnale SID si somma direttamente alle voci POKEY nel mixer interno;
 l'uscita audio dell'Atari (TV/monitor) porta SID + POKEY senza amplificatori
 esterni. Nessuna traduzione di livello necessaria: AUDIO IN è un ingresso
 analogico ad alta impedenza, non un segnale bus digitale.
-

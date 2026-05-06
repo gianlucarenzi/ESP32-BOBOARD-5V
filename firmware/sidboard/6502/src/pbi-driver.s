@@ -1,7 +1,7 @@
 ; PBI Device Driver ROM (MPD) skeleton
 ; based on Earl Rice ANTIC Magazine
 ;
-; (C) 2025 RetroBit Lab
+; (C) 2025-26 RetroBit Lab
 ; written by Gianluca Renzi
 
 ; Generic OS Parallel Device handler vectors
@@ -26,8 +26,8 @@
 ; Critical code section flag
 .define CRITIC $42
 
-; Device Name [V]era Module
-.define DEVNAM 'V'
+; Device Name S[I]D Board
+.define DEVNAM 'I'
 
 ; OS Equates
 .define DDEVIC     $0300
@@ -62,14 +62,54 @@
 ; Having setting the index offset somewhere in the IOCB block so the
 ; GET/PUT/STATUS vectors will retreive them from the call mechanism.
 
-; For now we are using a zero page variable.
-.define VERAINDEXREG    $fa ; zero page index register
-
-; Device VERA REGISTERS are mapped $D100-$D11F
+; Device SID REGISTERS are mapped $D100-$D11F
 .define PBI_ADDR        $D100
-.define VERA_REG_ADDR   PBI_ADDR + 0
-.define VERA_CTRL_REG   PBI_ADDR + $05
-.define VERA_LAST_REG   PBI_ADDR + $1F
+
+; SID Register Map Definition
+.define SID_BASE		PBI_ADDR
+
+; Voice 1
+.define V1_FREQ_LO    SID_BASE + 0   ; Frequency Low
+.define V1_FREQ_HI    SID_BASE + 1   ; Frequency High
+.define V1_PW_LO      SID_BASE + 2   ; Pulse Width Low
+.define V1_PW_HI      SID_BASE + 3   ; Pulse Width High
+.define V1_CTRL       SID_BASE + 4   ; Control Register (Waveform, Gate)
+.define V1_ADSR       SID_BASE + 5   ; Attack/Decay
+.define V1_SUSREL     SID_BASE + 6   ; Sustain/Release
+
+; Voice 2
+.define V2_FREQ_LO    SID_BASE + 7
+.define V2_FREQ_HI    SID_BASE + 8
+.define V2_PW_LO      SID_BASE + 9
+.define V2_PW_HI      SID_BASE + 10
+.define V2_CTRL       SID_BASE + 11
+.define V2_ADSR       SID_BASE + 12
+.define V2_SUSREL     SID_BASE + 13
+
+; Voice 3
+.define V3_FREQ_LO    SID_BASE + 14
+.define V3_FREQ_HI    SID_BASE + 15
+.define V3_PW_LO      SID_BASE + 16
+.define V3_PW_HI      SID_BASE + 17
+.define V3_CTRL       SID_BASE + 18
+.define V3_ADSR       SID_BASE + 19
+.define V3_SUSREL     SID_BASE + 20
+
+; Filter & Volume
+.define FILTER_LO     SID_BASE + 21  ; Filter Cutoff Frequency Low
+.define FILTER_HI     SID_BASE + 22  ; Filter Cutoff Frequency High
+.define FILTER_RES    SID_BASE + 23  ; Resonance/Voice Routing
+.define MODE_VOL      SID_BASE + 24  ; Filter Mode/Volume
+
+; Voice 3 Random/Osc
+.define V3_OSC        SID_BASE + 25  ; OSC3 Readout
+.define V3_ENV        SID_BASE + 26  ; ENV3 Readout
+.define SID_UNUSED_27 SID_BASE + 27
+.define SID_UNUSED_28 SID_BASE + 28
+.define SID_UNUSED_29 SID_BASE + 29
+.define SID_UNUSED_30 SID_BASE + 30
+.define SID_UNUSED_31 SID_BASE + 31
+.define SID_NUM_REGS   $20
 
 ; OS ROM (MPD) $D800 Vector Table
 
@@ -100,7 +140,7 @@
     .word NONEED-1
 
     ; CLOSE VECTOR
-    .word NONEED-1
+    .word CLOSE-1
 
     ; GET BYTE VECTOR
     .word GETBYT-1
@@ -164,26 +204,36 @@ INIT:
     lda #>GENDEV
     ldy #<GENDEV
     jsr NEWDEV        ; returns: N = 1 - failed, C = 0 - success, C = 1 - entry already exists
-    
-    ; TODO: something useful with result codes
-   
+        
     ; TODO: device-specifi init
-    ; Like initialize the 320x240 256 colors mode
-    ; and write something on the screen
-    
-    lda #0            ; initialize the register index
-    sta VERAINDEXREG  ; 
+    jsr SILENCE
+    rts
 
+SILENCE:
+    lda #0
+    ldy #0
+clr_sid:
+    sta SID_BASE,y
+    iny
+    cpy #SID_NUM_REGS  ; 32 registers
+    bne clr_sid
+    rts
+
+CLOSE:
+    lda #0
+    sta CRITIC                ; Enable deferred vertical blank
+    jsr SILENCE
+    ldy #1
+    sec
     rts
 
 ; GET BYTE ROUTINE
 GETBYT:
     lda #0
     sta CRITIC                ; Enable deferred vertical blank
+    ldy ICAX1,x
+    lda SID_BASE,y
 
-    ldx VERAINDEXREG          ; reading index
-    lda VERA_REG_ADDR,x       ; Accessing to the needed register
-    
     ldy #1
     sec                       ; Indicate we handled it
                               ; Register 'A' holds the value to be read
@@ -191,11 +241,12 @@ GETBYT:
 
 ; PUT BYTE ROUTINE
 PUTBYT:
-    ldx #0
-    stx CRITIC                ; Enable deferred vertical blank
-    
-    ldx VERAINDEXREG          ; reading index 
-    sta VERA_REG_ADDR,x       ; Regsiter 'A' holds the value to be written
+    pha
+    lda #0
+    sta CRITIC                ; Enable deferred vertical blank
+    ldy ICAX1,x
+    pla
+    sta SID_BASE,y
 
     ldy #1
     sec                       ; Indicate we handled it
@@ -205,7 +256,6 @@ PUTBYT:
 GETSTA:
     lda #0
     sta CRITIC              ; Enable deferred vertical blank
-    lda VERA_CTRL_REG       ; Accessing to the CTRL register
 
     ldy #1
     sec                     ; Indicate we handled it
