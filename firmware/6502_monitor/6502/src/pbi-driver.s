@@ -1,7 +1,7 @@
 ; PBI Device Driver ROM (MPD) skeleton
 ; based on Earl Rice ANTIC Magazine
 ;
-; (C) 2025 RetroBit Lab
+; (C) 2025-26 RetroBit Lab
 ; written by Gianluca Renzi
 
 ; Generic OS Parallel Device handler vectors
@@ -61,9 +61,6 @@
 ; The best approach should be using CIO/IOCB routines.
 ; Having setting the index offset somewhere in the IOCB block so the
 ; GET/PUT/STATUS vectors will retreive them from the call mechanism.
-
-; For now we are using a zero page variable.
-.define VERAINDEXREG    $fa ; zero page index register
 
 ; Device VERA REGISTERS are mapped $D100-$D11F
 .define PBI_ADDR        $D100
@@ -170,20 +167,15 @@ INIT:
     ; TODO: device-specifi init
     ; Like initialize the 320x240 256 colors mode
     ; and write something on the screen
-    
-    lda #0            ; initialize the register index
-    sta VERAINDEXREG  ; 
-
     rts
 
 ; GET BYTE ROUTINE
 GETBYT:
     lda #0
     sta CRITIC                ; Enable deferred vertical blank
+    ldy ICAX1,x
+    lda VERA_REG_ADDR,y
 
-    ldx VERAINDEXREG          ; reading index
-    lda VERA_REG_ADDR,x       ; Accessing to the needed register
-    
     ldy #1
     sec                       ; Indicate we handled it
                               ; Register 'A' holds the value to be read
@@ -191,11 +183,12 @@ GETBYT:
 
 ; PUT BYTE ROUTINE
 PUTBYT:
-    ldx #0
-    stx CRITIC                ; Enable deferred vertical blank
-    
-    ldx VERAINDEXREG          ; reading index 
-    sta VERA_REG_ADDR,x       ; Regsiter 'A' holds the value to be written
+    pha
+    lda #0
+    sta CRITIC                ; Enable deferred vertical blank
+    ldy ICAX1,x
+    pla
+    sta VERA_REG_ADDR,y
 
     ldy #1
     sec                       ; Indicate we handled it
