@@ -65,3 +65,27 @@ The system uses an external **74HC138** decoder for the `$D800-$DFFF` range to r
 - **PHI2 sync:** Confirmed stable triggering on rising edge.
 - **Data Injection:** 2KB ROM emulation serving `pbi_driver` array correctly within the PHI2 HIGH window.
 - **Device Selection:** $D1FF write logic correctly enables/disables the PBI driver response.
+
+## 2026-05-07: VERA Text Mode Boot Screen
+
+### Overview
+The 6502 PBI ROM now initializes the external VERA chip mapped at `$D100-$D11F` during driver startup. The boot sequence configures a text screen in a Commander X16-inspired style for Atari PBI/ECI usage.
+
+### Video Initialization
+- **VERA register model:** The driver now uses CX16-compatible VERA register naming, remapped to the Atari PBI window at `$D100`.
+- **Screen mode:** Layer 1 text mode configured for **80x25** cells with **8x16** character geometry.
+- **Display style:** Blue background, black border, white text.
+- **Banner text:** The ROM writes:
+  - `**** COMMANDER X16 VERA ****`
+  - `PBI VIDEO INTERFACE`
+  - `READY.`
+
+### Font Handling
+- The VERA bitstream does **not** provide a guaranteed ready-to-use system font after reset.
+- For this reason, the ROM now loads a **minimal 8x16 font subset** into VERA VRAM at startup.
+- The embedded glyph set is intentionally compact and currently covers only the characters required by the boot banner.
+
+### ROM Size Constraint
+- The 6502 PBI ROM linker configuration is now limited to **2KB** (`$0800` bytes).
+- This matches the ESP32-side ROM fetch logic, which serves the driver with `offset & 0x7FF`.
+- Current generated ROM size: **2048 bytes**.
