@@ -3,3 +3,6 @@
 *report*.txt
 *.csv.backup_*
 *.kicad_pcb.backup_*
+/firmware/sidboard/6502/pbi-driver.bin
+/firmware/sidboard/6502/pbi-driver.l
+/firmware/sidboard/6502/pbi-driver.o
