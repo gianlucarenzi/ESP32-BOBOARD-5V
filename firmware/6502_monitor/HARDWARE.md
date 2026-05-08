@@ -152,7 +152,7 @@ combinatorial logic (GAL/CPLD) fed directly from the address bus.
 | GPIO 15 | R/W_ | GPIO_IN | 15 | Input | Strapping pin |
 | GPIO 5 | D1XX_N | GPIO_IN | 5 | Input | Strapping pin |
 | GPIO 4 | ROM_SEL_N | GPIO_IN | 4 | Input | From 74HC138 Y7 |
-| GPIO 0 | EXTSEL_N | GPIO_OUT | 0 | **Output** | **Bootstrap pin — see warning** |
+| GPIO 0 | EXTSEL_N | GPIO_OUT | 0 | **Output (OD)** | **Bootstrap pin — see warning** |
 | GPIO 3 | DEV_SEL_N | GPIO_OUT | 3 | **Output** | **UART0 RX — RX must be disabled** |
 
 ### Boot-time warnings
@@ -233,9 +233,9 @@ always high-impedance (input-only GPIOs or direction-controlled by firmware).
 ### U3 — Address A8–A10, control signals, EXTSEL_N
 
 Seven channels are Atari → ESP32 (B dominant); one channel (A8/B8) is
-ESP32 → Atari (A dominant).  The TXS0108 auto-direction detection handles
-this correctly because EXTSEL_N is always actively driven by the ESP32
-push-pull output, while the Atari signals are always driven from the B side.
+ESP32 → Atari (A dominant). The TXS0108 auto-direction detection handles
+this correctly because EXTSEL_N is driven as an **Open-Drain** output by the ESP32,
+while the Atari signals are always driven from the B side.
 
 | Channel | A side (GPIO, 3.3 V) | B side (5 V) | Direction | Source |
 |---|---|---|---|---|
@@ -246,7 +246,7 @@ push-pull output, while the Atari signals are always driven from the B side.
 | A5 / B5 | GPIO 15 — R/W_ | Atari R/W_ | B → A | Atari |
 | A6 / B6 | GPIO 5 — D1XX_N | External decoder | B → A | External |
 | A7 / B7 | GPIO 4 — ROM_SEL_N | 74HC138 Y7 | B → A | 74HC138 |
-| A8 / B8 | GPIO 0 — EXTSEL_N | Atari EXTSEL | **A → B** | **ESP32** |
+| A8 / B8 | GPIO 0 — EXTSEL_N | Atari EXSEL | **A → B (OD)** | **ESP32** |
 
 ---
 
@@ -320,3 +320,4 @@ Combined: **A15=1, A14=1, A13=0, A12=1, A11=1 → $D800–$DFFF** ✓
   U3 and GPIO 2) to damp ringing at the 240 MHz sampling rate.
 - GPIO 12 (A9) must be LOW or floating during ESP32 reset.  If the Atari is
   powered at the same time, ensure A9 is not asserted HIGH at boot.
+.

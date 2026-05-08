@@ -1,5 +1,11 @@
 # Project Logs & Architectural Decisions
 
+## 2026-05-08: Multi-device Bus Support
+- **EXTSEL_N (EXSEL):** Switched to **Open-Drain (OD)** mode. This allows the signal to be shared with other PBI devices without hardware contention.
+- **Terminology Fix:** Updated documentation to reflect that EXTSEL_N disables motherboard **memory** (not just ROM).
+- **MPD & IRQ Analysis:** Confirmed IRQ is handled by the VERA FPGA and MPD is driven by the 74HCT138 hardware decoder. Clarified that sharing MPD would require hardware modifications (e.g., diodes) due to the push-pull nature of the '138.
+- **Boot Integrity:** Maintained internal pull-ups and established High-Z state at boot for EXTSEL_N to ensure it doesn't interfere with the Atari startup until explicitly driven.
+
 ## 2026-05-06: High-Performance PBI Driver Implementation
 
 ### Overview
