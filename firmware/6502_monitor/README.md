@@ -1,34 +1,29 @@
-# 6502 Monitor for ESP32
+# Atari 6502 Bus Monitor & RAM Emulator
 
-This project implements a high-speed bus monitor for a 6502 CPU (specifically for Atari 8-bit systems) using an ESP32 NodeMCU DevKit V1. It operates at 1.79 MHz and provides interface logic for both PBI (Parallel Bus Interface) and CCTL (Cartridge Control) modes.
+High-performance ESP32-based firmware for monitoring and emulating the Atari 8-bit bus (XL/XE Parallel Bus Interface).
 
-## Key Features
-- **High Performance:** Optimized with direct register access and IRAM-resident tasks to meet 1.79 MHz bus timings (~280ns window).
-- **Dual Mode Support:**
-  - **PBI Mode:** Monitors $D100-$D1FF, $D600-$D7FF (RAMSEL), and $D800-$DFFF (ROMSEL). Handles device activation (VCS) and memory disabling (EXTSEL/MPD).
-  - **CCTL Mode:** Monitors $D500-$D5FF for cartridge port integration.
-- **Safe Boot Design:** Pin mapping avoids critical ESP32 bootstrap pins (GPIO 0 and 12 for input) to ensure reliable startup.
-- **Serial Debugging:** Real-time status updates via UART0 TX (115200 bps).
+## Features
+- **Bus Modes:**
+    - **PBI Mode (Default):** Full Atari PBI device emulation. Supports $D1XX page, ROMSEL ($D800-$DFFF), RAMSEL ($D600-$D7FF), MPD, and EXSEL signals.
+    - **CCTL Mode:** Cartridge Control mode. Simplified operation with VCS (Virtual Chip Select) always active. Does not use MPD, ROMSEL, RAMSEL, or EXSEL signals.
+- **RAM Emulation:** 512 bytes of internal IRAM used for $D600-$D7FF area in PBI mode.
+- **Mirroring:** Due to pin constraints, A8 is not decoded; range $D6xx and $D7xx are mirrored (256 bytes).
+- **Fast Response:** Optimized IRAM-resident tasks and LUTs for < 50ns bus latency.
+- **Universal Support:** Native mapping for NodeMCU DevKit V1 and ESP32-PICO-D4 SiP.
 
 ## Hardware Setup
-All signals must pass through 3.3V $\leftrightarrow$ 5V level shifters (e.g., TXS0108E).
+Refer to the following documents for detailed pinout:
+- [General Pin Mapping](PIN_MAPPING.md) (Standard NodeMCU)
+- [ESP32-PICO-D4 Mapping](PICO_D4_MAPPING.md) (Optimized SiP)
+- [Hardware Architecture](HARDWARE.md)
 
-For a detailed pinout and wiring guide, see [PIN_MAPPING.md](6502_monitor/PIN_MAPPING.md) or the professional [LaTeX reference](6502_monitor/PIN_MAPPING.tex).
+## Development
+This project uses **PlatformIO**. 
+- Style: **Allman** (braces on new line).
+- Column Limit: **80**.
+- Tool: `clang-format`.
 
-### Signal Summary (24 Signals)
-- **Data Bus:** D0-D7 (GPIO 4, 5, 13, 14, 16, 17, 18, 19)
-- **Address Bus:** A0-A7 (GPIO 34, 35, 36, 39, 32, 33, 21, 27)
-- **Control In:** PHI2, R/W, SEL_N, ROMSEL, RAMSEL
-- **Control Out:** EXTSEL (on RX0), VCS, MPD
-
-## Installation
-1. Install [PlatformIO](https://platformio.org/).
-2. Open the `6502_monitor` directory.
-3. Configure the desired mode in `src/main.cpp`:
-   ```cpp
-   #define BUS_MODE BUS_MODE_PBI // or BUS_MODE_CCTL
-   ```
-4. Build and upload:
-   ```bash
-   pio run -t upload
-   ```
+### Configuration
+Edit `BUS_MODE` and `HARDWARE_TARGET` in `src/main.cpp` or use build flags:
+- `BUS_MODE`: `BUS_MODE_PBI` (Default) or `BUS_MODE_CCTL`.
+- `HARDWARE_TARGET`: `TARGET_NODEMCU` (Default) or `TARGET_PICO_D4`.
