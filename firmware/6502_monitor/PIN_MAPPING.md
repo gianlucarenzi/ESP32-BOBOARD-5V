@@ -46,8 +46,8 @@
 ---
 
 ## ⚠️ Hardware Validation & Boot Sequence
-1. **Startup:** Upon power-on, the ESP32 immediately pulls **GPIO 12 (RESET)** LOW, holding the Atari 130XE in reset.
-2. **GPIO 0 (MPD):** The Atari's internal pull-up ensures GPIO 0 is HIGH, allowing the ESP32 to boot normally.
-3. **Initialization:** The ESP32 configures all GPIOs and starts the 1.79 MHz MonitorTask.
-4. **Release:** After 100ms, the ESP32 drives **GPIO 12** HIGH, allowing the Atari to start its boot process.
-5. **Level Shifters:** Ensure the Level Shifter for GPIO 12 is powered and functional during this sequence.
+1. **Level Shifters:** All I/O signals between Atari and ESP32 are passed through **TXS0108E bidirectional level shifters**. These are critical for boot stability, as they ensure high-impedance isolation of the Atari's pull-up resistors during the ESP32's power-on/boot sequence, preventing strapping conflicts on GPIO 0, 12, etc.
+2. **Startup:** Upon power-on, the ESP32 immediately pulls **GPIO 12 (RESET)** LOW, holding the Atari 130XE in reset.
+3. **GPIO 0 (MPD):** The Atari's internal pull-up (isolated by level shifter) ensures GPIO 0 remains HIGH, allowing the ESP32 to boot normally.
+4. **Initialization:** The ESP32 configures all GPIOs and starts the 1.79 MHz MonitorTask.
+5. **Release:** After 100ms, the ESP32 drives **GPIO 12** HIGH, allowing the Atari to start its boot process.
