@@ -4,102 +4,60 @@
 \usepackage{geometry}
 \geometry{margin=1in}
 \usepackage{booktabs}
-\usepackage{xcolor}
-\usepackage{hyperref}
 
-\title{6502 Monitor - ESP32 Pin Mapping Reference}
+\title{6502 Monitor - ESP32 Pin Mapping (Atari 130XE Validated)}
 \author{Atari ESP32 Project}
 \date{\today}
 
 \begin{document}
-
 \maketitle
 
 \section{Overview}
-This document details the final pin assignment for the ESP32 NodeMCU DevKit V1 interfacing with a 6502 (Atari) system at 1.79 MHz. The firmware utilizes direct register access and IRAM-resident tasks to meet timing requirements.
+Final pin assignment for ESP32 NodeMCU DevKit V1. Includes Atari RESET control to ensure synchronized startup.
 
-\section{Data Bus (Bidirectional)}
-All data bus pins are located in \textbf{GPIO Bank 0} for optimized 8-bit parallel access.
-
+\section{Data Bus (Bank 0)}
 \begin{table}[h!]
 \centering
-\begin{tabular}{@{}llll@{}}
+\begin{tabular}{@{}lll@{}}
 \toprule
-\textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} & \textbf{Level Shifter} \\ \midrule
-D0                   & GPIO 4             & D4                  & Yes (5V $\leftrightarrow$ 3.3V) \\
-D1                   & GPIO 5             & D5                  & Yes \\
-D2                   & GPIO 13            & D13                 & Yes \\
-D3                   & GPIO 14            & D14                 & Yes \\
-D4                   & GPIO 16            & RX2                 & Yes \\
-D5                   & GPIO 17            & TX2                 & Yes \\
-D6                   & GPIO 18            & D18                 & Yes \\
-D7                   & GPIO 19            & D19                 & Yes \\ \bottomrule
+\textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} \\ \midrule
+D0-D7                & GPIO 4, 5, 13, 14, 16, 17, 18, 19 & D4, D5, D13, D14, RX2, TX2, D18, D19 \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Address Bus (Inputs)}
-A0--A3 are connected to "Input Only" pins for maximum safety.
-
+\section{Address Bus}
 \begin{table}[h!]
 \centering
-\begin{tabular}{@{}llll@{}}
+\begin{tabular}{@{}lll@{}}
 \toprule
-\textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} & \textbf{Characteristics} \\ \midrule
-A0                   & GPIO 34            & D34                 & \textbf{Input Only}      \\
-A1                   & GPIO 35            & D35                 & \textbf{Input Only}      \\
-A2                   & GPIO 36            & VP                  & \textbf{Input Only}      \\
-A3                   & GPIO 39            & VN                  & \textbf{Input Only}      \\
-A4                   & GPIO 32            & D32                 & Input/Output             \\
-A5                   & GPIO 33            & D33                 & Input/Output             \\
-A6                   & GPIO 21            & D21                 & Input/Output             \\
-A7                   & GPIO 27            & D27                 & Input/Output             \\ \bottomrule
+\textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} \\ \midrule
+A0-A3                & GPIO 34, 35, 36, 39 & D34, D35, VP, VN (Input Only) \\
+A4-A7                & GPIO 32, 33, 21, 27 & D32, D33, D21, D27 \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Control Signals (Inputs)}
+\section{Control Signals}
 \begin{table}[h!]
 \centering
 \begin{tabular}{@{}llll@{}}
 \toprule
 \textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} & \textbf{Description} \\ \midrule
-PHI2                 & GPIO 2             & D2                  & System Clock (Synchronization) \\
-R/W                  & GPIO 15            & D15                 & Read (H) / Write (L) \\
-SEL\_N               & GPIO 22            & D22                 & D1XX\_N (PBI) or CCTL\_N (Cart) \\
-ROMSEL               & GPIO 23            & D23                 & \$D800--\$DFFF Range Select (PBI) \\
-RAMSEL               & GPIO 26            & D26                 & \$D600--\$D7FF Range Select (PBI) \\ \bottomrule
+PHI2                 & GPIO 2             & D2                  & System Clock (IN) \\
+R/W                  & GPIO 15            & D15                 & Read/Write (IN) \\
+SEL\_N               & GPIO 22            & D22                 & D1XX\_N / CCTL\_N (IN) \\
+ROMSEL               & GPIO 23            & D23                 & \$D800--\$DFFF Range (IN) \\
+RAMSEL               & GPIO 26            & D26                 & \$D600--\$D7FF Range (IN) \\
+EXTSEL               & GPIO 3             & \textbf{RX0}        & Disable Atari Memory (OUT) \\
+VCS                  & GPIO 25            & D25                 & Device Select (OUT) \\
+MPD                  & \textbf{GPIO 0}    & \textbf{BOOT}       & Math Pack Disable (OUT) \\ 
+RESET                & \textbf{GPIO 12}   & \textbf{D12}        & Atari RESET Control (OUT) \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\newpage
-\section{Control Signals (Outputs)}
-\begin{table}[h!]
-\centering
-\begin{tabular}{@{}llll@{}}
-\toprule
-\textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} & \textbf{Description} \\ \midrule
-EXTSEL               & GPIO 3             & \textbf{RX0}        & Disable Atari Memory (Active Low) \\
-VCS                  & GPIO 25            & D25                 & Device Select (Active Low) \\
-MPD                  & GPIO 12            & \textbf{D12}        & Math Pack Disable (Active Low) \\ \bottomrule
-\end{tabular}
-\end{table}
-
-\section{System \& Debug}
-\begin{table}[h!]
-\centering
-\begin{tabular}{@{}llll@{}}
-\toprule
-\textbf{Signal}      & \textbf{ESP32 GPIO} & \textbf{Board Label} & \textbf{Description} \\ \midrule
-Debug TX             & GPIO 1             & TX0                 & Serial output (115200 bps) \\
-GND                  & GND                & GND                 & Common Ground with Atari \\ \bottomrule
-\end{tabular}
-\end{table}
-
-\section{Critical Hardware Notes}
+\section{Hardware Safety \& Boot Sequence}
 \begin{itemize}
-    \item \textbf{GPIO 12 (MPD) Safety:} This is a bootstrap pin. It \textbf{MUST be LOW} during ESP32 power-on/reset. If the Atari system pulls this pin HIGH at boot, the ESP32 will fail to start. Ensure a pull-down resistor or that the level shifter is inactive during ESP32 reset.
-    \item \textbf{RX0 (GPIO 3) Usage:} UART0 Receive is disabled in software. This pin is strictly used as a digital output for \textbf{EXTSEL}. Do not connect a serial source (PC RX) to this pin if the Atari is connected.
-    \item \textbf{Level Shifters:} All signals must pass through 3.3V $\leftrightarrow$ 5V level shifters (like TXS0108E).
-    \item \textbf{PBI vs CCTL Mode:} Toggle the mode in \texttt{main.cpp} via \texttt{\#define BUS_MODE}.
+    \item \textbf{Atari RESET (GPIO 12):} Held LOW immediately on power-up to keep Atari paused.
+    \item \textbf{ESP32 Boot (GPIO 0):} Safe boot via Atari's internal pull-up.
 \end{itemize}
 
 \end{document}

@@ -1,76 +1,80 @@
 #pragma once
 
 #include <Arduino.h>
+
 #include <cstring>
-#include "freertos/FreeRTOS.h"
+
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
 
 // SID register offsets (relative to $D100)
-#define SID_V1_FREQ_LO  0x00
-#define SID_V1_FREQ_HI  0x01
-#define SID_V1_PW_LO    0x02
-#define SID_V1_PW_HI    0x03
-#define SID_V1_CTRL     0x04
-#define SID_V1_AD       0x05
-#define SID_V1_SR       0x06
-#define SID_V2_FREQ_LO  0x07
-#define SID_V2_FREQ_HI  0x08
-#define SID_V2_PW_LO    0x09
-#define SID_V2_PW_HI    0x0A
-#define SID_V2_CTRL     0x0B
-#define SID_V2_AD       0x0C
-#define SID_V2_SR       0x0D
-#define SID_V3_FREQ_LO  0x0E
-#define SID_V3_FREQ_HI  0x0F
-#define SID_V3_PW_LO    0x10
-#define SID_V3_PW_HI    0x11
-#define SID_V3_CTRL     0x12
-#define SID_V3_AD       0x13
-#define SID_V3_SR       0x14
-#define SID_FC_LO       0x15
-#define SID_FC_HI       0x16
-#define SID_RES_FILT    0x17
-#define SID_MODE_VOL    0x18
+#define SID_V1_FREQ_LO 0x00
+#define SID_V1_FREQ_HI 0x01
+#define SID_V1_PW_LO   0x02
+#define SID_V1_PW_HI   0x03
+#define SID_V1_CTRL    0x04
+#define SID_V1_AD      0x05
+#define SID_V1_SR      0x06
+#define SID_V2_FREQ_LO 0x07
+#define SID_V2_FREQ_HI 0x08
+#define SID_V2_PW_LO   0x09
+#define SID_V2_PW_HI   0x0A
+#define SID_V2_CTRL    0x0B
+#define SID_V2_AD      0x0C
+#define SID_V2_SR      0x0D
+#define SID_V3_FREQ_LO 0x0E
+#define SID_V3_FREQ_HI 0x0F
+#define SID_V3_PW_LO   0x10
+#define SID_V3_PW_HI   0x11
+#define SID_V3_CTRL    0x12
+#define SID_V3_AD      0x13
+#define SID_V3_SR      0x14
+#define SID_FC_LO      0x15
+#define SID_FC_HI      0x16
+#define SID_RES_FILT   0x17
+#define SID_MODE_VOL   0x18
 
 // Number of SID registers mapped at $D100-$D11F
-#define SID_NUM_REGS    0x20
+#define SID_NUM_REGS 0x20
 
 // Voice control register bits
-#define SID_CTRL_GATE   0x01
-#define SID_CTRL_SYNC   0x02
-#define SID_CTRL_RING   0x04
-#define SID_CTRL_TEST   0x08
-#define SID_CTRL_TRI    0x10
-#define SID_CTRL_SAW    0x20
-#define SID_CTRL_SQR    0x40
-#define SID_CTRL_NOI    0x80
+#define SID_CTRL_GATE 0x01
+#define SID_CTRL_SYNC 0x02
+#define SID_CTRL_RING 0x04
+#define SID_CTRL_TEST 0x08
+#define SID_CTRL_TRI  0x10
+#define SID_CTRL_SAW  0x20
+#define SID_CTRL_SQR  0x40
+#define SID_CTRL_NOI  0x80
 
 // PAL SID clock frequency (Hz)
-#define SID_PAL_CLOCK   985248.0f
+#define SID_PAL_CLOCK 985248.0f
 
 // Audio output
-#define SID_DAC_PIN     25                          // ESP32 DAC1
-#define SID_SAMPLE_RATE 22050                       // Hz
-#define SID_TIMER_US    (1000000 / SID_SAMPLE_RATE) // ~45 µs per sample
+#define SID_DAC_PIN     25                           // ESP32 DAC1
+#define SID_SAMPLE_RATE 22050                        // Hz
+#define SID_TIMER_US    (1000000 / SID_SAMPLE_RATE)  // ~45 µs per sample
 
 /**
  * cSIDLight - Lightweight SID 6581/8580 emulator.
  *
  * Self-contained: no external audio library required.
  * Audio output via ESP32 DAC on GPIO 25 (SID_DAC_PIN).
- * Uses esp_timer at SID_SAMPLE_RATE Hz to tick 3 square-wave phase accumulators.
+ * Uses esp_timer at SID_SAMPLE_RATE Hz to tick 3 square-wave phase
+ * accumulators.
  *
  * Bus-timing safety:
- *  write() is a single volatile byte store — no FreeRTOS primitives, no critical
- *  sections, no blocking. Safe to call on every PHI2 cycle from MonitorTask (Core 1)
- *  without affecting Atari bus sampling.
- *  process() detects register changes via snapshot comparison and updates synthesis
- *  parameters; it must be called periodically from loop() (Core 1, low priority).
+ *  write() is a single volatile byte store — no FreeRTOS primitives, no
+ * critical sections, no blocking. Safe to call on every PHI2 cycle from
+ * MonitorTask (Core 1) without affecting Atari bus sampling. process() detects
+ * register changes via snapshot comparison and updates synthesis parameters; it
+ * must be called periodically from loop() (Core 1, low priority).
  *
  * Cross-core shared state (_phaseInc[], _voiceVol[]):
  *  Written by process() on Core 1, read by _tick() on Core 0.
- *  Declared volatile uint32_t/int32_t — 32-bit DRAM accesses are not cached per-core
- *  on ESP32, so volatile is sufficient for inter-core visibility on Xtensa LX6.
+ *  Declared volatile uint32_t/int32_t — 32-bit DRAM accesses are not cached
+ * per-core on ESP32, so volatile is sufficient for inter-core visibility on
+ * Xtensa LX6.
  *
  * Emulation notes (Light = simplified):
  *  - 3 independent square-wave voices via 32-bit phase accumulators.
@@ -81,10 +85,10 @@
  */
 class cSIDLight
 {
-public:
+   public:
     cSIDLight()
     {
-        memset((void *)_regs,     0, sizeof(_regs));
+        memset((void *)_regs, 0, sizeof(_regs));
         memset((void *)_prevRegs, 0, sizeof(_prevRegs));
         memset(_gate, 0, sizeof(_gate));
         for (int i = 0; i < 3; i++)
@@ -97,10 +101,10 @@ public:
         dacWrite(SID_DAC_PIN, 128);  // DC center
 
         esp_timer_create_args_t ta = {};
-        ta.callback        = &_timerCb;
-        ta.arg             = this;
-        ta.dispatch_method = ESP_TIMER_TASK;
-        ta.name            = "sid_audio";
+        ta.callback                = &_timerCb;
+        ta.arg                     = this;
+        ta.dispatch_method         = ESP_TIMER_TASK;
+        ta.name                    = "sid_audio";
         esp_timer_create(&ta, &_timer);
         esp_timer_start_periodic(_timer, SID_TIMER_US);
     }
@@ -114,9 +118,9 @@ public:
 
     /**
      * Write a SID register.
-     * Single volatile byte store — no FreeRTOS primitives, no critical sections.
-     * Safe to call on every PHI2 cycle from MonitorTask (Core 1, IRAM context)
-     * without any risk of delaying Atari bus sampling.
+     * Single volatile byte store — no FreeRTOS primitives, no critical
+     * sections. Safe to call on every PHI2 cycle from MonitorTask (Core 1, IRAM
+     * context) without any risk of delaying Atari bus sampling.
      */
     void IRAM_ATTR write(uint8_t reg, uint8_t val)
     {
@@ -135,9 +139,9 @@ public:
     }
 
     /**
-     * Scan _regs[] for changes since the last call and update synthesis parameters.
-     * O(SID_NUM_REGS) byte comparisons — no FreeRTOS calls, very fast.
-     * Call from loop() (Core 1, low priority).
+     * Scan _regs[] for changes since the last call and update synthesis
+     * parameters. O(SID_NUM_REGS) byte comparisons — no FreeRTOS calls, very
+     * fast. Call from loop() (Core 1, low priority).
      */
     void process()
     {
@@ -158,7 +162,7 @@ public:
      */
     void reset()
     {
-        memset((void *)_regs,     0, sizeof(_regs));
+        memset((void *)_regs, 0, sizeof(_regs));
         memset((void *)_prevRegs, 0, sizeof(_prevRegs));
         for (int i = 0; i < 3; i++)
         {
@@ -168,25 +172,28 @@ public:
         }
     }
 
-private:
-    esp_timer_handle_t  _timer;
+   private:
+    esp_timer_handle_t _timer;
 
-    // Register shadow — written by write() (Core 1), read by process() (Core 1).
-    // Both callers are on Core 1 (MonitorTask and loop()): no cross-core issue.
-    volatile uint8_t    _regs[SID_NUM_REGS];
+    // Register shadow — written by write() (Core 1), read by process() (Core
+    // 1). Both callers are on Core 1 (MonitorTask and loop()): no cross-core
+    // issue.
+    volatile uint8_t _regs[SID_NUM_REGS];
 
-    // Snapshot used by process() to detect changes — only accessed by process().
-    uint8_t             _prevRegs[SID_NUM_REGS];
+    // Snapshot used by process() to detect changes — only accessed by
+    // process().
+    uint8_t _prevRegs[SID_NUM_REGS];
 
     // Gate state — only accessed by process().
-    bool                _gate[3];
+    bool _gate[3];
 
-    // Synthesis state — written by process() (Core 1), read by _tick() (Core 0).
-    // volatile uint32_t/int32_t: DRAM on ESP32 is not per-core cached, so 32-bit
-    // aligned volatile stores are immediately visible across cores (Xtensa LX6).
-    volatile uint32_t   _phase[3];
-    volatile uint32_t   _phaseInc[3];
-    volatile int32_t    _voiceVol[3];   // ±amplitude per voice (0 = silent)
+    // Synthesis state — written by process() (Core 1), read by _tick() (Core
+    // 0). volatile uint32_t/int32_t: DRAM on ESP32 is not per-core cached, so
+    // 32-bit aligned volatile stores are immediately visible across cores
+    // (Xtensa LX6).
+    volatile uint32_t _phase[3];
+    volatile uint32_t _phaseInc[3];
+    volatile int32_t  _voiceVol[3];  // ±amplitude per voice (0 = silent)
 
     // Timer callback: produce one audio sample and write it to the DAC
     static void _timerCb(void *arg)
@@ -204,7 +211,7 @@ private:
             // Square wave: sign bit selects +vol or -vol
             mix += (_phase[i] & 0x80000000U) ? _voiceVol[i] : -_voiceVol[i];
         }
-        if (mix < 0)   mix = 0;
+        if (mix < 0) mix = 0;
         if (mix > 255) mix = 255;
         dacWrite(SID_DAC_PIN, (uint8_t)mix);
     }
@@ -222,7 +229,8 @@ private:
         return hz < 1 ? 1 : hz;
     }
 
-    // Master volume: low nibble of $D118, max ±42 per voice (3 voices × 42 = 126 ≤ 128)
+    // Master volume: low nibble of $D118, max ±42 per voice (3 voices × 42 =
+    // 126 ≤ 128)
     int _masterVol() const
     {
         return (_regs[SID_MODE_VOL] & 0x0F) * (128 / (3 * 16));
@@ -231,9 +239,10 @@ private:
     void _updateVoice(int v)
     {
         const int base = v * 7;
-        uint16_t  fval = (uint16_t)_regs[base] | ((uint16_t)_regs[base + 1] << 8);
-        uint8_t   ctrl = _regs[base + 4];
-        bool      gate = (ctrl & SID_CTRL_GATE) != 0;
+        uint16_t  fval =
+            (uint16_t)_regs[base] | ((uint16_t)_regs[base + 1] << 8);
+        uint8_t ctrl = _regs[base + 4];
+        bool    gate = (ctrl & SID_CTRL_GATE) != 0;
 
         _phaseInc[v] = _phaseIncFor(_sidFreqHz(fval));
 

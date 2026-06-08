@@ -360,16 +360,14 @@ CLEAR_SCREEN:
 ; --------------------------------------------------------------------------
 ; LOAD_FULL_FONT — copy the full 128-char Atari font into VERA VRAM.
 ; Each charset slot is 16 bytes (8-row bitmap written twice).
+;
+; REMAPPING logic to convert Internal Atari order to ASCII order:
+;   Internal 0-63   (Space..._) -> VRAM 32-95
+;   Internal 64-95  (Ctrl graphics) -> VRAM 0-31
+;   Internal 96-127 (Lower case) -> VRAM 96-127
 ; --------------------------------------------------------------------------
 
 LOAD_FULL_FONT:
-    lda #<CHARSET_ADDR
-    sta VERA_ADDR_L
-    lda #>CHARSET_ADDR
-    sta VERA_ADDR_M
-    lda #(VERA_INC1 | ^CHARSET_ADDR)
-    sta VERA_ADDR_H
-
     ; Setup pointer to FontData in zero-page ($43-$44)
     lda #<FontData
     sta $43
@@ -378,6 +376,56 @@ LOAD_FULL_FONT:
 
     ldx #0                  ; X = character index (0-127)
 @NextChar:
+    stx @TempX
+    
+    ; Determine target ASCII/VRAM slot for Internal code X
+    txa
+    cmp #64
+    bcc @Upper              ; 0-63 -> 32-95
+    cmp #96
+    bcc @Control            ; 64-95 -> 0-31
+    ; 96-127 stays 96-127
+    tax
+    jmp @SetAddr
+
+@Upper:
+    clc
+    adc #32
+    tax
+    jmp @SetAddr
+
+@Control:
+    sec
+    sbc #64
+    tax
+
+@SetAddr:
+    ; Set VERA address for character slot X
+    ; Address = CHARSET_ADDR + X * 16
+    ; X is target ASCII slot
+    stx @TargetX
+    
+    txa
+    and #$0F                ; lower nibble
+    asl
+    asl
+    asl
+    asl                     ; * 16
+    sta VERA_ADDR_L
+    
+    lda @TargetX
+    lsr
+    lsr
+    lsr
+    lsr                     ; upper nibble
+    clc
+    adc #>CHARSET_ADDR      ; + $F0
+    sta VERA_ADDR_M
+    
+    lda #(VERA_INC1 | ^CHARSET_ADDR)
+    sta VERA_ADDR_H
+
+    ; Copy 8 rows from FontData[InternalX]
     ldy #0
 @CopyRows:
     lda ($43),y
@@ -387,7 +435,7 @@ LOAD_FULL_FONT:
     cpy #8
     bne @CopyRows
 
-    ; Advance FontData pointer by 8
+    ; Advance FontData pointer by 8 (next Internal character)
     lda $43
     clc
     adc #8
@@ -396,10 +444,14 @@ LOAD_FULL_FONT:
     adc #0
     sta $44
 
+    ldx @TempX
     inx
     cpx #128
     bne @NextChar
     rts
+
+@TempX:   .byte 0
+@TargetX: .byte 0
 
 
 ; --------------------------------------------------------------------------

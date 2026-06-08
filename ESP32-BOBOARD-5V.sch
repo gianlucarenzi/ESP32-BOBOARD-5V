@@ -1280,18 +1280,6 @@ Connection ~ 5745 1400
 Wire Wire Line
 	5745 1400 5875 1400
 $Comp
-L RetroBitLab:CONN_02x16_PIN_SMD_Counter_Clockwise J3
-U 1 1 68D1A2AD
-P 9425 5050
-F 0 "J3" H 9485 5870 50  0000 C CNN
-F 1 "CONN_02x16_PIN_SMD_Counter_Clockwise" H 9485 4130 50  0000 C CNN
-F 2 "Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD" H 9425 5050 50  0001 C CNN
-F 3 "https://www.lcsc.com/datasheet/C6332241.pdf" H 9425 5050 50  0001 C CNN
-F 4 "C6332241" H 9425 5050 50  0001 C CNN "LCSC"
-	1    9425 5050
-	1    0    0    -1  
-$EndComp
-$Comp
 L CCAP0805:100uF C1
 U 1 1 68D279D6
 P 3625 1050
@@ -1548,4 +1536,16 @@ Text Label 7850 1780 0    50   ~ 0
 5VCC
 Text Label 10325 4225 0    50   ~ 0
 5VCC
+$Comp
+L RetroBitLab:CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab J3
+U 1 1 6A276616
+P 9425 5050
+F 0 "J3" H 9470 5885 50  0000 C CNN
+F 1 "CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab" H 9655 4095 50  0000 C CNN
+F 2 "Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD" H 9425 5050 50  0001 C CNN
+F 3 "" H 9425 5050 50  0001 C CNN
+F 4 "C6332241" H 9425 5050 50  0001 C CNN "LCSC"
+	1    9425 5050
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC
