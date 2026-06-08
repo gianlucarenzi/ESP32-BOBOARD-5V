@@ -1,0 +1,9 @@
+BasedOnStyle: Google
+BreakBeforeBraces: Allman
+IndentWidth: 4
+ColumnLimit: 80
+AllowShortFunctionsOnASingleLine: false
+IndentCaseLabels: true
+AlignConsecutiveMacros: true
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
