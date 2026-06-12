@@ -26,6 +26,22 @@
 
 cSIDLight *sidLight = nullptr;
 
+#ifdef AUDIO_DEMO
+#include "Commando_dmp.h"
+static int                demo_frame   = 0;
+static const int          demo_total   = sidLength / 25;
+static esp_timer_handle_t demo_timer_h = nullptr;
+
+static void demo_tick(void *)
+{
+    if (!sidLight) return;
+    const uint8_t *f = sidData + (size_t)demo_frame * 25;
+    for (uint8_t r = 0; r < 25; r++)
+        sidLight->write(r, f[r]);
+    if (++demo_frame >= demo_total) demo_frame = 0;
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Pin Definitions
 // ---------------------------------------------------------------------------
@@ -268,6 +284,19 @@ void setup()
     // cSIDLight: 3-voice square-wave synthesis, DAC1 output on GPIO 25
     sidLight = new cSIDLight();
     Serial.println("[sidboard] cSIDLight initialized, DAC1 on GPIO 25");
+
+#ifdef AUDIO_DEMO
+    {
+        esp_timer_create_args_t da = {};
+        da.callback        = &demo_tick;
+        da.dispatch_method = ESP_TIMER_TASK;
+        da.name            = "sid_demo";
+        esp_timer_create(&da, &demo_timer_h);
+        esp_timer_start_periodic(demo_timer_h, 20000);  // 50 Hz = 20 ms
+    }
+    Serial.printf("[sidboard] AUDIO_DEMO: Commando, %d frames @ 50 Hz (%.1f s, looping)\n",
+                  demo_total, demo_total / 50.0f);
+#endif
 
     xTaskCreatePinnedToCore(MonitorTask, "CCTL", 4096, NULL, 10, NULL, 1);
     Serial.println("[sidboard] MonitorTask running on Core 1.");
