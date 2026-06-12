@@ -81,7 +81,7 @@ static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 16, 17, 18, 19};
 #define EVT_LATCH 0   // VCS latch state change
 #define EVT_REG   1   // $D100-$D1FE register access
 
-// flags: bit 0 = 1→write / 0→read   bit 1 = latch state (EVT_LATCH only)
+// flags: bit 0 = 1→write / 0→read   bit 1 = latch state (EVT_LATCH only)   bit 2 = MPD asserted (LO)   bit 3 = EXTSEL asserted (LO)
 typedef struct {
     uint64_t ts_us;   // timestamp: microseconds since boot (esp_timer_get_time())
     uint8_t  type;
@@ -212,8 +212,12 @@ void IRAM_ATTR MonitorTask(void *pvParameters)
                         GPIO.out_w1ts = m_extsel;
                     // Log only when state changes
                     if (latch_active != prev)
-                        log_send(EVT_LATCH, 0xFF, data,
-                                 latch_active ? 0x02 : 0x00);
+                    {
+                        uint8_t fl = latch_active ? 0x02 : 0x00;
+                        if (!(lo & m_romsel)) fl |= 0x04;  // MPD asserted
+                        if (latch_active)     fl |= 0x08;  // EXTSEL now asserted
+                        log_send(EVT_LATCH, 0xFF, data, fl);
+                    }
                 }
             }
             else
@@ -221,9 +225,11 @@ void IRAM_ATTR MonitorTask(void *pvParameters)
             {
                 // $D100-$D1FE: VERA register access — log R and W
                 // Re-read GPIO.in so VERA has had time to put read data on bus.
-                uint8_t data  = decode_data(GPIO.in);
-                uint8_t flags = (lo & m_rw) ? 0x00 : 0x01;  // 0=read, 1=write
-                log_send(EVT_REG, offset, data, flags);
+                uint8_t data = decode_data(GPIO.in);
+                uint8_t fl   = (lo & m_rw) ? 0x00 : 0x01;  // 0=read, 1=write
+                if (!(lo & m_romsel)) fl |= 0x04;  // MPD asserted
+                if (latch_active)     fl |= 0x08;  // EXTSEL asserted (SEL_N active + latch)
+                log_send(EVT_REG, offset, data, fl);
             }
         }
         else
@@ -367,9 +373,11 @@ void loop()
         if (evt.type == EVT_LATCH)
         {
             bool enabled = (evt.flags & 0x02) != 0;
-            Serial.printf("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to $D1FF)\n",
+            Serial.printf("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to $D1FF) MPD=%s EXTSEL=%s\n",
                           sec, us,
-                          enabled ? "ENABLED " : "DISABLED", evt.data);
+                          enabled ? "ENABLED " : "DISABLED", evt.data,
+                          (evt.flags & 0x04) ? "LO" : "HI",
+                          (evt.flags & 0x08) ? "LO" : "HI");
         }
         else  // EVT_REG
         {
@@ -377,12 +385,14 @@ void loop()
             if (evt.offset == 0x05 && (evt.flags & 0x01))
                 dcsel = (evt.data >> 1) & 0x07;
 
-            Serial.printf("[%5lu.%06lu] [D1%02X - %-20s] %c $%02X\n",
+            Serial.printf("[%5lu.%06lu] [D1%02X - %-20s] %c $%02X  MPD=%s EXTSEL=%s\n",
                           sec, us,
                           evt.offset,
                           vera_reg_name(evt.offset, dcsel),
                           (evt.flags & 0x01) ? 'W' : 'R',
-                          evt.data);
+                          evt.data,
+                          (evt.flags & 0x04) ? "LO" : "HI",
+                          (evt.flags & 0x08) ? "LO" : "HI");
         }
     }
 }
