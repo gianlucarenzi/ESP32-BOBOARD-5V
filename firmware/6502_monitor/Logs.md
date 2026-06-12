@@ -1,6 +1,22 @@
 # Project Logs & Architectural Decisions
 
-## 2026-06-12: VERA Register Name Logging & ROM Source Restructure
+## 2026-06-12: Firmware Simplification, Full 2 KB Decode, VERA Logging
+
+### Firmware Simplification — Drop RESET / VCS / RAM Emulation
+Commit `b58b0f6` removed ~165 lines of obsolete logic:
+- **Dropped**: Atari RESET output, VCS output pin, RAMSEL input, the entire 512-byte emulated RAM at $D600–$D7FF.
+- **Kept**: ROMSEL handler (asserts MPD, drives `pbi_rom[A0-A7]` on reads) and EXTSEL handler ($D1XX + latch).
+- **Motivation**: the RAM emulation was never required by the VERA driver; removing it freed three GPIO pins and reduced the interrupt-path footprint significantly.
+
+### Full 2 KB ROM Decode — A8, A9, A10 Wired
+Commit `75b3f3e`: GPIOs 12 / 25 / 26 were freed from RESET / VCS / RAMSEL and wired to **A8 / A9 / A10**.
+- `pbi_rom[]` expanded from 256 bytes to **2048 bytes** (`IRAM_ATTR`).
+- `decode_addr()` now returns an **11-bit** address (A0-A10), removing the previous $D6xx/$D7xx aliasing.
+- Pin definitions updated: `PIN_A8 = 12  // formerly RESET`, `PIN_A9 = 25  // formerly VCS`, `PIN_A10 = 26  // formerly RAMSEL`.
+- All pin-mapping documents (PIN_MAPPING.md, PIN_MAPPING.tex, PIN_MAPPING.pdf, PIN-MAPPING.md, READMEs) regenerated to match.
+
+### NodeMCU DevKit V1 — Sole Hardware Target
+Commit `8395e40` removed the ESP32-PICO-D4 build environment from `platformio.ini`. The project now targets **NodeMCU-32S** exclusively (`nodemcu-32s` for PBI, `nodemcu-32s-cctl` for CCTL).
 
 ### FreeRTOS Log Queue
 - Added a 64-entry `LogEvt` queue (Core 1 → Core 0) carrying microsecond-precision timestamps (`esp_timer_get_time()`).
