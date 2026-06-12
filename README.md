@@ -165,9 +165,9 @@ flowchart TD
     A --> C[TXS0108E #2] 
     A --> D[TXS0108E #3]
     
-    B --> E[Address Bus A8-A15]
-    C --> F[Data Bus D0-D7]
-    D --> G[Control Signals]
+    B --> E[Data Bus D0-D7]
+    C --> F[Address Bus A0-A7]
+    D --> G[Address A8-A10 + Controls]
     
     E --> H[6502 System]
     F --> H
@@ -186,9 +186,9 @@ flowchart TD
 
 La scheda utilizza tre TXS0108E per garantire la compatibilità tra i livelli logici 3.3V dell'ESP32 e i 5V del sistema 6502:
 
-- **TXS0108E #1**: Address Bus A8-A15 + controlli
-- **TXS0108E #2**: Data Bus D0-D7 (bidirezionale)
-- **TXS0108E #3**: Address Bus A0-A7 + segnali aggiuntivi
+- **TXS0108E #1**: Data Bus D0-D7 (bidirezionale)
+- **TXS0108E #2**: Address Bus A0-A7
+- **TXS0108E #3**: Address Bus A8-A10 + segnali di controllo (PHI2, R/W, SEL\_N, ROMSEL, EXTSEL, MPD)
 
 ## 💻 Firmware
 
@@ -312,14 +312,15 @@ Il formato è `[secondi.microsecondi]`:
 [6502_monitor] Running.
 [6502_monitor] VCS=OFF  Latch=DISABLED
 [    0.012345] [VCS ] Latch ENABLED  ($80 written to $D1FF)
-[    0.012346] [D100] R $00
-[    0.012390] [D103] W $FF
-[    1.234567] [D104] W $00
+[    0.012346] [D100 - VERA_ADDR_L          ] R $00
+[    0.012390] [D103 - VERA_DATA0           ] W $FF
+[    1.234567] [D104 - VERA_DATA1           ] W $00
 [    1.234600] [VCS ] Latch DISABLED ($00 written to $D1FF)
 ```
 
 - `[VCS ]` — cambio di stato del latch: `ENABLED` / `DISABLED`
-- `[D1xx]` — accesso a registro VERA: `R` = lettura, `W` = scrittura
+- `[D1xx - NOME_REGISTRO]` — accesso a registro VERA con nome simbolico: `R` = lettura, `W` = scrittura
+- I registri $09–$0C sono muxati da DCSEL: il logger traccia ogni scrittura a `VERA_CTRL` ($D105, bit [2:1]) per risolvere il nome corretto
 - Il timestamp è catturato in Core 1 al momento del ciclo di bus (`esp_timer_get_time()`)
 - Gli eventi persi quando la coda è piena vengono scartati senza bloccare il bus handler
 

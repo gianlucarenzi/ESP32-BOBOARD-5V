@@ -1,5 +1,26 @@
 # Project Logs & Architectural Decisions
 
+## 2026-06-12: VERA Register Name Logging & ROM Source Restructure
+
+### FreeRTOS Log Queue
+- Added a 64-entry `LogEvt` queue (Core 1 → Core 0) carrying microsecond-precision timestamps (`esp_timer_get_time()`).
+- Two event types: `EVT_LATCH` (PBI latch state change) and `EVT_REG` (every $D100–$D1FE access including R/W direction and data byte).
+- Core 0 `loop()` drains the queue and prints without ever blocking the bus handler.
+
+### VERA Register Name Resolution
+- Added `vera_reg_name(offset, dcsel)` lookup table in `loop()` (Core 0 only, not IRAM-resident).
+- Covers all registers defined in `vera_common.inc`: `VERA_ADDR_L/M/H`, `VERA_DATA0/1`, `VERA_CTRL`, `VERA_IEN`, `VERA_ISR`; muxed DC/FX registers ($09–$0C, 7 DCSEL banks); Layer 1 registers ($14–$1A).
+- DCSEL state tracked by shadowing writes to `VERA_CTRL` (offset $05, bits [2:1]) — no struct change needed.
+- New serial format: `[    0.012390] [D103 - VERA_DATA0           ] W $FF`
+
+### 6502 ROM Source Restructure
+- Renamed `pbi-driver.s` → `6502/src/vera_pbi_handler.s`; extracted shared VERA symbols into `6502/src/vera_common.inc`.
+- Added `pre_build.py` PlatformIO `pre:` hook — runs `make -C 6502/` before any C++ compilation.
+- Makefile assembles with `ca65`, links at $D800 (2 KB) with `ld65`, converts to `include/pbi-driver.h` via `hexdump`.
+- Two `platformio.ini` environments: `nodemcu-32s` (PBI, `BUS_MODE=0`) and `nodemcu-32s-cctl` (CCTL, `BUS_MODE=1`).
+
+---
+
 ## 2026-05-08: Multi-device Bus Support
 - **EXTSEL_N (EXSEL):** Switched to **Open-Drain (OD)** mode. This allows the signal to be shared with other PBI devices without hardware contention.
 - **Terminology Fix:** Updated documentation to reflect that EXTSEL_N disables motherboard **memory** (not just ROM).

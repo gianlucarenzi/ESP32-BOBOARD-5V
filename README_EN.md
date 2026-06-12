@@ -165,9 +165,9 @@ flowchart TD
     A --> C[TXS0108E #2] 
     A --> D[TXS0108E #3]
     
-    B --> E[Address Bus A8-A15]
-    C --> F[Data Bus D0-D7]
-    D --> G[Control Signals]
+    B --> E[Data Bus D0-D7]
+    C --> F[Address Bus A0-A7]
+    D --> G[Address A8-A10 + Controls]
     
     E --> H[6502 System]
     F --> H
@@ -186,9 +186,9 @@ flowchart TD
 
 The board uses three TXS0108E to ensure compatibility between ESP32's 3.3V logic levels and the 6502 system's 5V:
 
-- **TXS0108E #1**: Address Bus A8-A15 + controls
-- **TXS0108E #2**: Data Bus D0-D7 (bidirectional)
-- **TXS0108E #3**: Address Bus A0-A7 + additional signals
+- **TXS0108E #1**: Data Bus D0-D7 (bidirectional)
+- **TXS0108E #2**: Address Bus A0-A7
+- **TXS0108E #3**: Address Bus A8-A10 + control signals (PHI2, R/W, SEL\_N, ROMSEL, EXTSEL, MPD)
 
 ## 💻 Firmware
 
@@ -312,14 +312,15 @@ Timestamp format is `[seconds.microseconds]`:
 [6502_monitor] Running.
 [6502_monitor] VCS=OFF  Latch=DISABLED
 [    0.012345] [VCS ] Latch ENABLED  ($80 written to $D1FF)
-[    0.012346] [D100] R $00
-[    0.012390] [D103] W $FF
-[    1.234567] [D104] W $00
+[    0.012346] [D100 - VERA_ADDR_L          ] R $00
+[    0.012390] [D103 - VERA_DATA0           ] W $FF
+[    1.234567] [D104 - VERA_DATA1           ] W $00
 [    1.234600] [VCS ] Latch DISABLED ($00 written to $D1FF)
 ```
 
 - `[VCS ]` — latch state change: `ENABLED` / `DISABLED`
-- `[D1xx]` — VERA register access: `R` = read, `W` = write
+- `[D1xx - REG_NAME]` — VERA register access with symbolic name: `R` = read, `W` = write
+- Registers $09–$0C are muxed by DCSEL: the logger shadows every write to `VERA_CTRL` ($D105, bits [2:1]) to resolve the correct name
 - Timestamp captured in Core 1 at the exact bus cycle (`esp_timer_get_time()`)
 - Events dropped when queue is full — the bus handler is never blocked
 
