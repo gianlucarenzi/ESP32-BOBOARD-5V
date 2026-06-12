@@ -84,23 +84,19 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 
 | Signal | ESP32 Pin | Description |
 |---------|-----------|-------------|
-| **A0-A1** | GPIO6, GPIO8 | Address Bus LSB (final rev. only) |
-| **A2-A5** | GPIO21, GPIO27, GPIO33, GPIO32 | Address Bus |
-| **A6-A7** | GPIO38, GPIO37 | Address Bus (final rev. only) |
-| **A8-A15** | GPIO2, GPIO5, GPIO12, GPIO15, GPIO34, GPIO35, GPIO36, GPIO39 | Address Bus MSB |
-| **D0-D7** | GPIO4, GPIO13, GPIO14, GPIO16, GPIO17, GPIO18, GPIO19, GPIO22 | Data Bus |
-| **PHI2** | GPIO23 | Processor clock |
-| **R/W** | GPIO25 | Read/Write signal |
-| **CS** | GPIO26 | Chip Select for FPGA |
-
-### Control Signals (Final Rev.)
-
-| Signal | ESP32 Pin | Description |
-|---------|-----------|-------------|
-| **EXSEL** | GPIO11 | External memory select |
-| **D1XX** | GPIO10 | PBI I/O space access |
-| **CCTL** | GPIO20 | Cartridge control |
-| **MPD** | GPIO7 | Math Pack ROM disable |
+| **D0-D7** | GPIO4, GPIO5, GPIO13, GPIO14, GPIO16, GPIO17, GPIO18, GPIO19 | Data Bus (Bidirectional) |
+| **A0-A3** | GPIO34, GPIO35, GPIO36, GPIO39 | Address Bus LSB (Input Only) |
+| **A4-A5** | GPIO32, GPIO33 | Address Bus |
+| **A6-A7** | GPIO21, GPIO27 | Address Bus |
+| **PHI2** | GPIO2 | 6502 processor clock |
+| **R/W** | GPIO15 | Read/Write |
+| **SEL_N** | GPIO22 | $D1XX / CCTL selection (Active Low, Input) |
+| **ROMSEL** | GPIO23 | $D800-$DFFF range select (Input) |
+| **RAMSEL** | GPIO26 | $D600-$D7FF range select (Input) |
+| **EXTSEL** | GPIO3 (RX0) | Disable Atari internal memory (Active Low, Output) |
+| **VCS** | GPIO25 | Device Select (Active Low, Output) |
+| **MPD** | GPIO0 (BOOT) | Math Pack Disable (Active Low, Output) |
+| **RESET** | GPIO12 | Atari RESET control (Active Low, Output) |
 
 ## 🎨 3D Visualization
 
@@ -237,21 +233,22 @@ static inline uint16_t read_address_bus(void) {
 
 ### Operating Modes
 
-#### Test Mode
-```cpp
-#define TEST  // Enable GPIO test mode
+#### PBI Mode (Default)
+```ini
+-D BUS_MODE=0  ; BUS_MODE_PBI
 ```
-- Automatic testing of all GPIO pins
-- Hardware connection verification
-- Colored diagnostic output
+- Full Atari PBI device emulation
+- Handles D1XX, ROMSEL, RAMSEL, MPD, EXTSEL signals
+- 512-byte RAM emulation ($D600-$D7FF)
+- Activation via write to $D1FF
 
-#### Monitor Mode
-```cpp
-#undef TEST  // Normal mode
+#### CCTL Mode (Cartridge)
+```ini
+-D BUS_MODE=1  ; BUS_MODE_CCTL
 ```
-- Continuous 6502 bus monitoring
-- PBI protocol implementation
-- Shadow memory management
+- Simplified Cartridge Control mode
+- VCS always active
+- Does not use MPD, ROMSEL, RAMSEL, EXTSEL
 
 ## 🚀 Installation and Setup
 
