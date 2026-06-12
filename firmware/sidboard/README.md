@@ -120,6 +120,8 @@ esp_timer @ 22050 Hz             └─ Data bus sample (write cycle)
 
 **Cross-core shared state** (`_regs[]`) is declared `volatile uint8_t`. On Xtensa LX6, DRAM is not cached per-core, so volatile byte stores from Core 1 are immediately visible to Core 0 without explicit barriers.
 
+**Log drain** dequeues at most **one entry per `loop()` iteration**. `Serial.printf()` at 115200 baud blocks ~3.5 ms per line; draining all 64 entries in a tight loop would stall `sidLight->process()` for ~220 ms, delaying SID register propagation to the audio engine. The 64-entry queue absorbs bursts while `process()` runs at full loop rate.
+
 ### MonitorTask Flow (Core 1)
 
 ```
@@ -179,8 +181,9 @@ Defined in `include/csidlight.h`. Self-contained — no external audio library.
 
 | Parameter | Value |
 |-----------|-------|
-| Sample rate | 22050 Hz |
-| Timer period | ~45 µs (via `esp_timer` on Core 0) |
+| Target sample rate | 22050 Hz |
+| Timer period | 45 µs (`SID_TIMER_US`, integer truncation of 45.351 µs) |
+| Actual sample rate | 22222 Hz (`SID_ACTUAL_RATE = 1000000 / SID_TIMER_US`) |
 | Output pin | GPIO 25 (ESP32 DAC1) |
 | Voices | 3 independent square-wave oscillators |
 | Emulated | Frequency, GATE, master volume |
@@ -188,24 +191,30 @@ Defined in `include/csidlight.h`. Self-contained — no external audio library.
 
 ### Frequency Formula (PAL clock = 985248 Hz)
 
+`esp_timer` fires every 45 µs (integer microseconds), giving an actual sample rate of 22222 Hz rather than the nominal 22050 Hz. `_phaseIncFor()` uses `SID_ACTUAL_RATE` to match the real timer cadence and keep pitch accurate.
+
 ```
 freq_hz  = (reg16 × 985248) / 2^24
-phaseInc = (freq_hz × 2^32) / 22050
+phaseInc = (freq_hz × 2^32) / 22222     ← SID_ACTUAL_RATE, not 22050
 ```
 
-At each 22050 Hz tick:
+At each tick the oscillator phase always advances, regardless of gate state (as on a real SID):
 
 ```
-phase[i] += phaseInc[i]
-square    = (phase[i] & 0x80000000) ? +voiceVol[i] : -voiceVol[i]
-mix       = clamp(128 + Σ square[i], 0, 255)
+phase[i] += phaseInc[i]                 ← unconditional
+if voiceVol[i] != 0:
+    square = (phase[i] & 0x80000000) ? +voiceVol[i] : -voiceVol[i]
+    mix   += square
+mix = clamp(128 + mix, 0, 255)
 dacWrite(25, mix)
 ```
 
 ### Master Volume
 
+Volume nibble is multiplied before dividing to avoid integer truncation loss:
+
 ```
-voiceVol = (reg[$18] & 0x0F) × (128 / 48)   // max 42 per voice; 3 × 42 = 126 ≤ 128
+voiceVol = (reg[$18] & 0x0F) × 128 / 48   // max 40 per voice; 3 × 40 = 120 ≤ 128
 ```
 
 ### API Surface
