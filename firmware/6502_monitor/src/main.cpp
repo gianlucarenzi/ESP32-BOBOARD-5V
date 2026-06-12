@@ -4,8 +4,8 @@
  * FIRMWARE: Targets NodeMCU DevKit V1 (ESP32-WROOM).
  *
  * BEHAVIOUR:
- * - ROMSEL ($D800-$DFFF): asserts MPD low; drives pbi_rom[A0-A7] on reads.
- *   A8-A10 are not wired on this board, so the 256-byte image mirrors 8x.
+ * - ROMSEL ($D800-$DFFF): asserts MPD low; drives pbi_rom[A0-A10] on reads.
+ *   Full 2 KB addressing via A0-A10 (no mirroring).
  * - EXTSEL ($D1XX / CCTL): asserted low when the internal latch is active.
  * - Latch (PBI mode): set by writing $80 to $D1FF, cleared by writing $00.
  * - Latch (CCTL mode): always active.
@@ -40,9 +40,12 @@
 #define PIN_D5 17
 #define PIN_D6 18
 #define PIN_D7 19
-// Address Bus (A6-A7)
-#define PIN_A6 21
-#define PIN_A7 27
+// Address Bus (A6-A10)
+#define PIN_A6  21
+#define PIN_A7  27
+#define PIN_A8  12  // formerly RESET
+#define PIN_A9  25  // formerly VCS
+#define PIN_A10 26  // formerly RAMSEL
 // PBI / Control
 #define PIN_SEL_N  22  // $D1XX / CCTL selection (Active LOW, Input)
 #define PIN_ROMSEL 23  // $D800-$DFFF range select (Active LOW, Input)
@@ -69,10 +72,10 @@ static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 16, 17, 18, 19};
 // ---------------------------------------------------------------------------
 // PBI ROM & Drive LUT
 // ---------------------------------------------------------------------------
-// 256-byte ROM image in IRAM, mirrored 8x across the 2K $D800-$DFFF range.
-static IRAM_ATTR uint8_t pbi_rom[256];
+// Full 2 KB ROM image in IRAM — A0-A10 decoded, no aliasing.
+static IRAM_ATTR uint8_t pbi_rom[2048];
 
-// Drive LUT: byte value → 32-bit GPIO bitmask for <50ns data bus writes.
+// Drive LUT: byte value → 32-bit GPIO bitmask for <50 ns data bus writes.
 static IRAM_ATTR uint32_t drive_lut[256];
 
 // Internal device-active latch.
@@ -89,12 +92,17 @@ static inline uint8_t IRAM_ATTR decode_data(uint32_t lo)
                      ((lo >> 18) & 1) << 6 | ((lo >> 19) & 1) << 7);
 }
 
-static inline uint8_t IRAM_ATTR decode_addr(uint32_t lo, uint32_t hi)
+// Returns an 11-bit address (A0-A10) for indexing pbi_rom[].
+static inline uint16_t IRAM_ATTR decode_addr(uint32_t lo, uint32_t hi)
 {
-    uint8_t a = (uint8_t)(((hi >> 2) & 1) | ((hi >> 3) & 1) << 1 |
-                          ((hi >> 4) & 1) << 2 | ((hi >> 7) & 1) << 3 |
-                          ((hi >> 0) & 1) << 4 | ((hi >> 1) & 1) << 5);
-    a |= ((lo >> 21) & 1) << 6 | ((lo >> 27) & 1) << 7;  // A6-A7: GPIO 21, 27
+    // A0-A5: GPIO_IN1_REG (GPIO 32-39 map to bits 0-7 of hi)
+    uint16_t a = (uint16_t)(((hi >> 2) & 1) | ((hi >> 3) & 1) << 1 |
+                             ((hi >> 4) & 1) << 2 | ((hi >> 7) & 1) << 3 |
+                             ((hi >> 0) & 1) << 4 | ((hi >> 1) & 1) << 5);
+    // A6-A7: GPIO_IN_REG
+    a |= ((lo >> 21) & 1) << 6 | ((lo >> 27) & 1) << 7;
+    // A8-A10: GPIO_IN_REG (GPIO 12, 25, 26)
+    a |= ((lo >> 12) & 1) << 8 | ((lo >> 25) & 1) << 9 | ((lo >> 26) & 1) << 10;
     return a;
 }
 
@@ -117,7 +125,7 @@ static inline void IRAM_ATTR bus_release()
 void IRAM_ATTR MonitorTask(void *pvParameters)
 {
     uint32_t lo, hi;
-    uint8_t  addr;
+    uint16_t addr;
 
     const uint32_t m_phi2   = (1UL << PIN_PHI2);
     const uint32_t m_rw     = (1UL << PIN_RW);
@@ -145,7 +153,7 @@ void IRAM_ATTR MonitorTask(void *pvParameters)
         {
             GPIO.out_w1tc = m_mpd;
             if (lo & m_rw)
-                bus_drive(pbi_rom[addr]);
+                bus_drive(pbi_rom[addr & 0x7FF]);
         }
         else
         {
@@ -159,8 +167,8 @@ void IRAM_ATTR MonitorTask(void *pvParameters)
                 GPIO.out_w1tc = m_extsel;
 
 #if BUS_MODE == BUS_MODE_PBI
-            // Latch control: CPU writes $80→enable, $00→disable at $D1FF
-            if (!(lo & m_rw) && addr == 0xFF)
+            // Latch control via $D1FF: write $80 = enable, $00 = disable
+            if (!(lo & m_rw) && (addr & 0xFF) == 0xFF)
             {
                 uint8_t data = decode_data(GPIO.in);
                 latch_active = (data == 0x80);
@@ -202,8 +210,8 @@ void setup()
     memset(pbi_rom, 0xEA, sizeof(pbi_rom));
 
     // Control outputs: inactive (HIGH)
-    pinMode(PIN_MPD, OUTPUT);
-    digitalWrite(PIN_MPD, HIGH);
+    pinMode(PIN_MPD,    OUTPUT);
+    digitalWrite(PIN_MPD,    HIGH);
     pinMode(PIN_EXTSEL, OUTPUT);
     digitalWrite(PIN_EXTSEL, HIGH);
 
@@ -215,14 +223,17 @@ void setup()
     pinMode(PIN_RW,     INPUT);
     pinMode(PIN_SEL_N,  INPUT);
     pinMode(PIN_ROMSEL, INPUT);
-    pinMode(PIN_A0, INPUT);
-    pinMode(PIN_A1, INPUT);
-    pinMode(PIN_A2, INPUT);
-    pinMode(PIN_A3, INPUT);
-    pinMode(PIN_A4, INPUT);
-    pinMode(PIN_A5, INPUT);
-    pinMode(PIN_A6, INPUT);
-    pinMode(PIN_A7, INPUT);
+    pinMode(PIN_A0,  INPUT);
+    pinMode(PIN_A1,  INPUT);
+    pinMode(PIN_A2,  INPUT);
+    pinMode(PIN_A3,  INPUT);
+    pinMode(PIN_A4,  INPUT);
+    pinMode(PIN_A5,  INPUT);
+    pinMode(PIN_A6,  INPUT);
+    pinMode(PIN_A7,  INPUT);
+    pinMode(PIN_A8,  INPUT);
+    pinMode(PIN_A9,  INPUT);
+    pinMode(PIN_A10, INPUT);
 
     xTaskCreatePinnedToCore(MonitorTask, "Monitor", 4096, NULL,
                             configMAX_PRIORITIES - 1, NULL, 1);

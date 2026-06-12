@@ -12,7 +12,7 @@
 | **D6** | GPIO 18 | D18 |
 | **D7** | GPIO 19 | D19 |
 
-## 2. Address Bus (Inputs — A0-A7 decoded, A8-A10 not wired)
+## 2. Address Bus (A0-A10 — full 2 KB decode)
 | 6502 Signal | ESP32 GPIO | Board Label | Note |
 | :--- | :--- | :--- | :--- |
 | **A0** | GPIO 34 | D34 | **Input Only** |
@@ -23,6 +23,9 @@
 | **A5** | GPIO 33 | D33 | |
 | **A6** | GPIO 21 | D21 | |
 | **A7** | GPIO 27 | D27 | |
+| **A8** | GPIO 12 | D12 | |
+| **A9** | GPIO 25 | D25 | |
+| **A10**| GPIO 26 | D26 | |
 
 ## 3. Control Signals
 | Signal | ESP32 GPIO | Board Label | Dir | Description |
@@ -42,7 +45,7 @@
 ---
 
 ## Notes
-- **A8–A10 not wired**: the 256-byte ROM image mirrors 8× across the 2 KB $D800–$DFFF range.
-- **GPIO 0 (MPD / BOOT)**: the Atari's internal pull-up (isolated by the TXS0108E level shifter) keeps GPIO 0 HIGH during ESP32 power-on, allowing normal boot.
-- **GPIO 3 (EXTSEL / RX0)**: shared with the UART RX pin; not usable for serial input while the firmware is running.
-- All I/O signals between Atari and ESP32 pass through **TXS0108E bidirectional level shifters**.
+- **A0-A10 decoded**: full 11-bit address covers the entire 2 KB $D800–$DFFF range without aliasing.
+- **GPIO 0 (MPD / BOOT)**: the Atari's internal pull-up (isolated by TXS0108E) keeps GPIO 0 HIGH during ESP32 boot.
+- **GPIO 3 (EXTSEL / RX0)**: shared with UART RX; not usable for serial input while firmware is running.
+- All signals pass through **TXS0108E** bidirectional level shifters (3.3 V ↔ 5 V).

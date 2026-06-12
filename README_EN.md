@@ -58,7 +58,7 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - **Status LEDs** and control buttons
 
 ### Firmware
-- **PBI ROM Emulator** ($D800–$DFFF, 2 KB — 256-byte image mirrored ×8)
+- **PBI ROM Emulator** ($D800–$DFFF, 2 KB — full A0-A10 decode, no aliasing)
 - **Dual-core processing** (Core 0: Serial, Core 1: Monitor)
 - **MPD** asserted on ROMSEL access
 - **EXTSEL** asserted on $D1XX access when internal latch is active
@@ -86,6 +86,7 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 | **D0-D7** | GPIO4, GPIO5, GPIO13, GPIO14, GPIO16, GPIO17, GPIO18, GPIO19 | Data Bus (Bidirectional) |
 | **A0-A3** | GPIO34, GPIO35, GPIO36, GPIO39 | Address Bus LSB (Input Only) |
 | **A4-A7** | GPIO32, GPIO33, GPIO21, GPIO27 | Address Bus |
+| **A8-A10** | GPIO12, GPIO25, GPIO26 | Address Bus (full 2 KB decode) |
 | **PHI2** | GPIO2 | 6502 clock (1.79 MHz) |
 | **R/W** | GPIO15 | Read/Write |
 | **SEL_N** | GPIO22 | $D1XX / CCTL selection (Active Low, Input) |
@@ -215,7 +216,7 @@ static inline uint16_t read_address_bus(void) {
 | Address Range | Function | Notes |
 |----------------|----------|-------|
 | **$D1FF** | Latch control (W: $80=on, $00=off) | PBI mode only |
-| **$D800–$DFFF** | PBI ROM 2 KB (read only) | 256-byte image, mirrored ×8 |
+| **$D800–$DFFF** | PBI ROM 2 KB (read only) | A0-A10 decoded, no aliasing |
 
 ### Operating Modes
 

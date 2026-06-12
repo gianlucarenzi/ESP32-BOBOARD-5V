@@ -22,14 +22,15 @@ D0--D7 & GPIO 4, 5, 13, 14, 16, 17, 18, 19 & D4, D5, D13, D14, RX2, TX2, D18, D1
 \end{tabular}
 \end{table}
 
-\section{Address Bus (A0--A7 decoded; A8--A10 not wired)}
+\section{Address Bus (A0--A10, full 2\,KB decode)}
 \begin{table}[h!]
 \centering
 \begin{tabular}{@{}lll@{}}
 \toprule
 \textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} \\ \midrule
-A0--A3 & GPIO 34, 35, 36, 39 & D34, D35, VP, VN \quad (\textbf{Input Only}) \\
-A4--A7 & GPIO 32, 33, 21, 27 & D32, D33, D21, D27 \\ \bottomrule
+A0--A3  & GPIO 34, 35, 36, 39 & D34, D35, VP, VN \quad (\textbf{Input Only}) \\
+A4--A7  & GPIO 32, 33, 21, 27 & D32, D33, D21, D27 \\
+A8--A10 & GPIO 12, 25, 26     & D12, D25, D26 \\ \bottomrule
 \end{tabular}
 \end{table}
 
@@ -50,7 +51,7 @@ MPD    & GPIO 0  & \textbf{BOOT} & OUT & Math Pack Disable (Active Low) \\ \bott
 
 \section{Notes}
 \begin{itemize}
-    \item \textbf{A8--A10 not wired:} the 256-byte ROM image mirrors 8$\times$ across the 2\,KB \$D800--\$DFFF range.
+    \item \textbf{Full 2\,KB ROM:} A0--A10 are decoded, covering all 2048 addresses of the \$D800--\$DFFF range without aliasing.
     \item \textbf{GPIO\,0 (MPD / BOOT):} kept HIGH during boot by the Atari pull-up (isolated via TXS0108E).
     \item \textbf{GPIO\,3 (EXTSEL / RX0):} shared with UART\,RX; not usable for serial input at runtime.
     \item All signals pass through \textbf{TXS0108E} bidirectional level shifters (3.3\,V\,$\leftrightarrow$\,5\,V).

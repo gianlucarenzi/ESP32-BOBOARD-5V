@@ -10,8 +10,8 @@
 
 | Segnale | GPIO ESP32 | Etichetta Board | Dir | Descrizione |
 | :--- | :---: | :--- | :---: | :--- |
-| **D0** | 4  | D4       | I/O | Bus Dati bit 0 |
-| **D1** | 5  | D5       | I/O | Bus Dati bit 1 |
+| **D0** |  4 | D4       | I/O | Bus Dati bit 0 |
+| **D1** |  5 | D5       | I/O | Bus Dati bit 1 |
 | **D2** | 13 | D13      | I/O | Bus Dati bit 2 |
 | **D3** | 14 | D14      | I/O | Bus Dati bit 3 |
 | **D4** | 16 | RX2      | I/O | Bus Dati bit 4 |
@@ -26,21 +26,25 @@
 | **A5** | 33 | D33      | IN  | Bus Indirizzi bit 5 |
 | **A6** | 21 | D21      | IN  | Bus Indirizzi bit 6 |
 | **A7** | 27 | D27      | IN  | Bus Indirizzi bit 7 |
-| **PHI2**   | 2  | D2       | IN  | Clock 6502 (1.79 MHz) |
+| **A8** | 12 | D12      | IN  | Bus Indirizzi bit 8 |
+| **A9** | 25 | D25      | IN  | Bus Indirizzi bit 9 |
+| **A10**| 26 | D26      | IN  | Bus Indirizzi bit 10 |
+| **PHI2**   |  2 | D2       | IN  | Clock 6502 (1.79 MHz) |
 | **R/W**    | 15 | D15      | IN  | Read/Write |
 | **SEL\_N** | 22 | D22      | IN  | Selezione $D1XX / CCTL (Active Low) |
 | **ROMSEL** | 23 | D23      | IN  | Range $D800–$DFFF (Active Low) |
-| **EXTSEL** | 3  | **RX0**  | OUT | Disabilita memoria interna Atari (Active Low) |
-| **MPD**    | 0  | **BOOT** | OUT | Math Pack Disable (Active Low) |
-| **TX debug** | 1 | TX0    | OUT | Console seriale (115200 bps) |
+| **EXTSEL** |  3 | **RX0**  | OUT | Disabilita memoria interna Atari (Active Low) |
+| **MPD**    |  0 | **BOOT** | OUT | Math Pack Disable (Active Low) |
+| **TX debug** | 1 | TX0   | OUT | Console seriale (115200 bps) |
 
 ---
 
 ## Note Tecniche
 
-- **A8–A10 non collegati**: i segnali di indirizzo superiori del range $D800–$DFFF non sono cablati sul connettore. La ROM da 256 byte si replica (mirror) 8× nel range da 2 KB.
-- **GPIO 0 (MPD/BOOT)**: il pull-up interno dell'Atari (isolato dal TXS0108E) mantiene GPIO 0 alto durante il boot dell'ESP32, garantendo l'avvio normale.
-- **GPIO 3 (EXTSEL/RX0)**: condiviso con il pin RX della UART; non utilizzabile per input seriale durante l'esecuzione del firmware.
-- **Bus Dati (LUT)**: poiché i GPIO del data bus non sono contigui, il firmware usa una LUT da 256 entry precalcolata per scrivere sul bus alla massima velocità possibile.
-- **Bus Indirizzi (A0–A5)**: ricadono nel registro `GPIO_IN1_REG` (GPIO 32–39), permettendo una lettura atomica in un singolo ciclo di clock.
-- Tutti i segnali Atari↔ESP32 passano attraverso i **TXS0108EPW** (level shifter bidirezionale 3.3 V / 5 V).
+- **A0–A10 decodificati**: 11 bit di indirizzo coprono l'intero range $D800–$DFFF (2 KB) senza aliasing.
+- **GPIO 0 (MPD/BOOT)**: il pull-up interno dell'Atari (isolato dal TXS0108E) mantiene GPIO 0 alto durante il boot dell'ESP32.
+- **GPIO 3 (EXTSEL/RX0)**: condiviso con il pin RX della UART; non utilizzabile per input seriale durante l'esecuzione.
+- **Bus Dati (LUT)**: GPIO non contigui → LUT da 256 entry precalcolata per scrivere sul bus alla massima velocità.
+- **Bus Indirizzi A0–A5**: nel registro `GPIO_IN1_REG` (GPIO 32–39), lettura atomica in un ciclo.
+- **Bus Indirizzi A6–A10**: nel registro `GPIO_IN_REG` (GPIO 0–31), campionati insieme agli altri segnali di controllo.
+- Tutti i segnali Atari↔ESP32 passano attraverso i **TXS0108EPW** (3.3 V / 5 V).
