@@ -102,7 +102,7 @@ static IRAM_ATTR uint8_t pbi_rom[2048];
 static IRAM_ATTR uint32_t drive_lut[256];
 
 // Internal device-active latch.
-volatile bool latch_active = (BUS_MODE == BUS_MODE_CCTL);
+volatile bool latch_active = false;
 
 // ---------------------------------------------------------------------------
 // Decoding Helpers (IRAM)
@@ -199,10 +199,9 @@ void IRAM_ATTR MonitorTask(void *pvParameters)
 
             uint8_t offset = addr & 0xFF;
 
-#if BUS_MODE == BUS_MODE_PBI
             if (offset == 0xFF)
             {
-                // $D1FF: latch control — only on writes
+                // $D1FF (PBI) / $D5FF (CCTL): latch control — only on writes
                 if (!(lo & m_rw))
                 {
                     uint8_t data     = decode_data(GPIO.in);
@@ -221,9 +220,8 @@ void IRAM_ATTR MonitorTask(void *pvParameters)
                 }
             }
             else
-#endif
             {
-                // $D100-$D1FE: VERA register access — log R and W
+                // $D100-$D1FE (PBI) / $D500-$D5FE (CCTL): register access — log R and W
                 // Re-read GPIO.in so VERA has had time to put read data on bus.
                 uint8_t data = decode_data(GPIO.in);
                 uint8_t fl   = (lo & m_rw) ? 0x00 : 0x01;  // 0=read, 1=write
@@ -373,9 +371,10 @@ void loop()
         if (evt.type == EVT_LATCH)
         {
             bool enabled = (evt.flags & 0x02) != 0;
-            Serial.printf("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to $D1FF) MPD=%s EXTSEL=%s\n",
+            Serial.printf("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to %s) MPD=%s EXTSEL=%s\n",
                           sec, us,
                           enabled ? "ENABLED " : "DISABLED", evt.data,
+                          (BUS_MODE == BUS_MODE_PBI) ? "$D1FF" : "$D5FF",
                           (evt.flags & 0x04) ? "LO" : "HI",
                           (evt.flags & 0x08) ? "LO" : "HI");
         }
