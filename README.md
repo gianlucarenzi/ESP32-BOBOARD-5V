@@ -215,8 +215,18 @@ static inline uint16_t read_address_bus(void) {
 
 | Range Indirizzi | Funzione | Note |
 |----------------|----------|------|
+| **$D100–$D11F** | Registri VERA (accesso via EXTSEL) | Solo con latch attivo |
 | **$D1FF** | Latch control (W: $80=on, $00=off) | Solo PBI mode |
-| **$D800–$DFFF** | PBI ROM 2 KB (read only) | A0-A10 decodificati, nessun aliasing |
+| **$D800–$DFFF** | PBI ROM 2 KB — driver VERA X16 | A0-A10 decodificati, nessun aliasing |
+
+#### 3. Sorgenti 6502 (ROM)
+
+| File | Descrizione |
+|------|-------------|
+| `6502/src/vera_pbi_handler.s` | Driver PBI ROM per scheda VERA X16. Intestazione standard Earl Rice ($D800–$D81C), handler CIO, vettori OPEN/CLOSE/GET/PUT/STATUS/SPECIAL, init VERA. |
+| `6502/src/vera_common.inc` | Simboli condivisi: indirizzi registri VERA (`VERA_ADDR_L/M/H`, `VERA_DATA0/1`, `VERA_CTRL`, …), costanti PBI (`PBI_ADDR=$D100`, `PBI_LATCH=$D1FF`), layout schermo. |
+| `6502/pbi-driver.ld` | Linker script: segmento `ROM` origin `$D800`, size `$0800` (2 KB). |
+| `include/pbi-driver.h` | Array C `pbi_driver[]` generato automaticamente dal Makefile — non modificare a mano. |
 
 ### Modalità di Funzionamento
 
@@ -462,11 +472,18 @@ gantt
 ESP32-BOBOARD-5V/
 ├── 📁 firmware/
 │   └── 📁 6502_monitor/
-│       ├── 📄 platformio.ini      # Configurazione PlatformIO
+│       ├── 📄 platformio.ini          # Configurazione PlatformIO
+│       ├── 📄 pre_build.py            # Script pre-build: assembla il ROM 6502
 │       ├── 📁 src/
-│       │   └── 📄 main.cpp        # Firmware principale
-│       └── 📁 include/
-│           └── 📄 pbi-driver.h    # Driver PBI ROM
+│       │   └── 📄 main.cpp            # Firmware ESP32 (PBI ROM emulator)
+│       ├── 📁 include/
+│       │   └── 📄 pbi-driver.h        # Array C generato dal ROM 6502 (auto)
+│       └── 📁 6502/
+│           ├── 📄 Makefile            # Assembla vera_pbi_handler.s → pbi-driver.h
+│           ├── 📄 pbi-driver.ld       # Linker script (origin $D800, size 2 KB)
+│           └── 📁 src/
+│               ├── 📄 vera_pbi_handler.s  # PBI ROM driver per scheda VERA X16
+│               └── 📄 vera_common.inc     # Simboli condivisi: registri VERA, costanti PBI
 ├── 📁 schematics/
 │   └── 📄 ESP32-BOBOARD-5V.pdf    # Schema elettrico
 ├── 📁 3D/
