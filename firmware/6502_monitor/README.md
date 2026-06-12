@@ -10,9 +10,11 @@ High-performance ESP32-based firmware that emulates the Atari 8-bit Parallel Bus
 - **Serial Output Format:**
     ```
     [    0.001234] [VCS ] Latch ENABLED  ($80 written to $D1FF)
-    [    0.002345] [D103] R $FF
-    [    0.002346] [D103] W $0A
+    [    0.002345] [D103 - VERA_DATA0           ] R $FF
+    [    0.002346] [D105 - VERA_CTRL            ] W $04
+    [    0.002347] [D109 - VERA_FX_CTRL         ] W $20
     ```
+  Registers $09-$0C are muxed by DCSEL (bits `[2:1]` of `VERA_CTRL`); the logger tracks the last write to `$D105` to resolve the correct name automatically.
 - **Fast Response:** IRAM-resident `MonitorTask` on Core 1 with direct GPIO register access (`GPIO.in`, `GPIO.out_w1ts/c`) for < 50 ns bus latency.
 - **Hardware Target:** NodeMCU DevKit V1 (ESP32-WROOM).
 

@@ -294,11 +294,71 @@ void setup()
     Serial.println("[6502_monitor] VCS=OFF  Latch=DISABLED");
 }
 
+// ---------------------------------------------------------------------------
+// VERA register name lookup — Core 0 only, not IRAM-resident.
+// Registers $09-$0C are muxed by DCSEL (bits [2:1] of VERA_CTRL, offset $05).
+// ---------------------------------------------------------------------------
+static const char *vera_reg_name(uint8_t offset, uint8_t dcsel)
+{
+    static const char *base[8] = {
+        "VERA_ADDR_L",  // $00
+        "VERA_ADDR_M",  // $01
+        "VERA_ADDR_H",  // $02
+        "VERA_DATA0",   // $03
+        "VERA_DATA1",   // $04
+        "VERA_CTRL",    // $05
+        "VERA_IEN",     // $06
+        "VERA_ISR",     // $07
+    };
+    if (offset < 8)
+        return base[offset];
+
+    if (offset >= 0x09 && offset <= 0x0C)
+    {
+        static const char *mux[7][4] = {
+            // DCSEL=0
+            { "VERA_DC_VIDEO",    "VERA_DC_HSCALE",       "VERA_DC_VSCALE",       "VERA_DC_BORDER"      },
+            // DCSEL=1
+            { "VERA_DC_HSTART",   "VERA_DC_HSTOP",        "VERA_DC_VSTART",       "VERA_DC_VSTOP"       },
+            // DCSEL=2
+            { "VERA_FX_CTRL",     "VERA_FX_TILEBASE",     "VERA_FX_MAPBASE",      "VERA_FX_MULT"        },
+            // DCSEL=3
+            { "VERA_FX_X_INCR_L", "VERA_FX_X_INCR_H",    "VERA_FX_Y_INCR_L",    "VERA_FX_Y_INCR_H"   },
+            // DCSEL=4
+            { "VERA_FX_X_POS_L",  "VERA_FX_X_POS_H",     "VERA_FX_Y_POS_L",     "VERA_FX_Y_POS_H"    },
+            // DCSEL=5
+            { "VERA_FX_X_POS_S",  "VERA_FX_Y_POS_S",     "VERA_FX_POLY_FILL_L", "VERA_FX_POLY_FILL_H" },
+            // DCSEL=6
+            { "VERA_FX_CACHE_L",  "VERA_FX_CACHE_M",     "VERA_FX_CACHE_H",     "VERA_FX_CACHE_U"     },
+        };
+        return mux[(dcsel < 7) ? dcsel : 0][offset - 0x09];
+    }
+
+    if (offset >= 0x14 && offset <= 0x1A)
+    {
+        static const char *l1[7] = {
+            "VERA_L1_CONFIG",    // $14
+            "VERA_L1_MAPBASE",   // $15
+            "VERA_L1_TILEBASE",  // $16
+            "VERA_L1_HSCR_L",   // $17
+            "VERA_L1_HSCR_H",   // $18
+            "VERA_L1_VSCR_L",   // $19
+            "VERA_L1_VSCR_H",   // $1A
+        };
+        return l1[offset - 0x14];
+    }
+
+    return "?";
+}
+
 // ============================================================================
 // Loop -- Core 0: drain log queue and print
 // ============================================================================
 void loop()
 {
+    // Shadow of VERA_CTRL DCSEL bits [2:1]; updated on every write to $D105.
+    static uint8_t dcsel = 0;
+
     LogEvt evt;
     while (xQueueReceive(log_queue, &evt, pdMS_TO_TICKS(10)) == pdTRUE)
     {
@@ -313,9 +373,14 @@ void loop()
         }
         else  // EVT_REG
         {
-            Serial.printf("[%5lu.%06lu] [D1%02X] %c $%02X\n",
+            // Track DCSEL so muxed registers ($09-$0C) resolve correctly.
+            if (evt.offset == 0x05 && (evt.flags & 0x01))
+                dcsel = (evt.data >> 1) & 0x07;
+
+            Serial.printf("[%5lu.%06lu] [D1%02X - %-20s] %c $%02X\n",
                           sec, us,
                           evt.offset,
+                          vera_reg_name(evt.offset, dcsel),
                           (evt.flags & 0x01) ? 'W' : 'R',
                           evt.data);
         }
