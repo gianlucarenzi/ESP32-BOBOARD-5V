@@ -19,10 +19,13 @@ C_ARRAY_FILE =$(OBJ_NAME).h
 # File di configurazione del linker
 LINK_CFG = pbi-driver.ld
 
-.PHONY: all clean
+.PHONY: all rebuild clean
 
 # Regola predefinita: compila tutto
 all: $(BIN_FILE) $(C_ARRAY_FILE)
+
+# Forza ricompilazione completa
+rebuild: clean all
 
 # ---
 ## Assemblaggio del Codice 6502
@@ -49,7 +52,7 @@ $(C_ARRAY_FILE): $(BIN_FILE)
 	@echo "" >> $@
 	@echo "#include <stdint.h>" >> $@
 	@echo "" >> $@
-	@echo "const uint8_t pbi_driver[] = {" >> $@
+	@echo "const uint8_t IRAM_ATTR pbi_driver[] = {" >> $@
 	hexdump -v -e '16/1 "0x%02x," "\n"' $<  >> $@
 	@echo "" >> $@
 	@echo "};" >> $@
