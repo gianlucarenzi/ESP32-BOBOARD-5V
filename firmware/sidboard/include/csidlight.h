@@ -51,7 +51,8 @@
 // Audio output — GPIO 25 (ESP32 DAC1), freed from address bus A9
 #define SID_DAC_PIN     25
 #define SID_SAMPLE_RATE 22050
-#define SID_TIMER_US    (1000000 / SID_SAMPLE_RATE)  // ~45 µs per sample
+#define SID_TIMER_US    (1000000 / SID_SAMPLE_RATE)  // 45 µs (integer truncation)
+#define SID_ACTUAL_RATE (1000000 / SID_TIMER_US)     // 22222 Hz — real timer rate
 
 /**
  * cSIDLight - Lightweight SID 6581/8580 emulator.
@@ -179,8 +180,8 @@ class cSIDLight
         int mix = 128;
         for (int i = 0; i < 3; i++)
         {
-            if (_voiceVol[i] == 0) continue;
             _phase[i] += _phaseInc[i];
+            if (_voiceVol[i] == 0) continue;
             mix += (_phase[i] & 0x80000000U) ? _voiceVol[i] : -_voiceVol[i];
         }
         if (mix < 0)   mix = 0;
@@ -190,7 +191,7 @@ class cSIDLight
 
     static uint32_t _phaseIncFor(int hz)
     {
-        return (uint32_t)(((uint64_t)hz << 32) / SID_SAMPLE_RATE);
+        return (uint32_t)(((uint64_t)hz << 32) / SID_ACTUAL_RATE);
     }
 
     static int _sidFreqHz(uint16_t fval)
@@ -201,7 +202,7 @@ class cSIDLight
 
     int _masterVol() const
     {
-        return (_regs[SID_MODE_VOL] & 0x0F) * (128 / (3 * 16));
+        return (_regs[SID_MODE_VOL] & 0x0F) * 128 / (3 * 16);
     }
 
     void _updateVoice(int v)
