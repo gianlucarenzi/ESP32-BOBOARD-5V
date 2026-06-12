@@ -9,12 +9,11 @@ High-performance ESP32-based firmware for monitoring and emulating the Atari 8-b
 - **RAM Emulation:** 512 bytes of internal IRAM used for $D600-$D7FF area in PBI mode.
 - **Mirroring:** Due to pin constraints, A8 is not decoded; range $D6xx and $D7xx are mirrored (256 bytes).
 - **Fast Response:** Optimized IRAM-resident tasks and LUTs for < 50ns bus latency.
-- **Universal Support:** Native mapping for NodeMCU DevKit V1 and ESP32-PICO-D4 SiP.
+- **Hardware Target:** NodeMCU DevKit V1 (ESP32-WROOM).
 
 ## Hardware Setup
 Refer to the following documents for detailed pinout:
-- [General Pin Mapping](PIN_MAPPING.md) (Standard NodeMCU)
-- [ESP32-PICO-D4 Mapping](PICO_D4_MAPPING.md) (Optimized SiP)
+- [General Pin Mapping](PIN_MAPPING.md) (NodeMCU DevKit V1)
 - [Hardware Architecture](HARDWARE.md)
 
 ## Development
@@ -26,4 +25,4 @@ This project uses **PlatformIO**.
 ### Configuration
 Edit `BUS_MODE` and `HARDWARE_TARGET` in `src/main.cpp` or use build flags:
 - `BUS_MODE`: `BUS_MODE_PBI` (Default) or `BUS_MODE_CCTL`.
-- `HARDWARE_TARGET`: `TARGET_NODEMCU` (Default) or `TARGET_PICO_D4`.
+- `HARDWARE_TARGET`: `TARGET_NODEMCU` (Default, NodeMCU DevKit V1).

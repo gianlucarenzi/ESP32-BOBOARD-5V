@@ -1,7 +1,7 @@
 /**
  * 6502_monitor -- Optimized ESP32 Monitor & RAM Emulator ($D600-$D7FF)
  *
- * UNIVERSAL FIRMWARE: Supports NodeMCU DevKit V1 and ESP32-PICO-D4 SiP.
+ * FIRMWARE: Targets NodeMCU DevKit V1 (ESP32-WROOM).
  *
  * CORE ARCHITECTURE:
  * - Real-time Bus Monitoring: PHI2-synchronized sampling on Core 1 (IRAM).
@@ -21,14 +21,6 @@
 // ---------------------------------------------------------------------------
 // Hardware & Mode Selection
 // ---------------------------------------------------------------------------
-#define TARGET_NODEMCU 0
-#define TARGET_PICO_D4 1
-
-// Default target if not specified via build flags
-#ifndef HARDWARE_TARGET
-#define HARDWARE_TARGET TARGET_NODEMCU
-#endif
-
 // Bus Protocol Mode
 #define BUS_MODE_PBI  0  // Parallel Bus Interface (Atari XL/XE)
 #define BUS_MODE_CCTL 1  // Cartridge Control (Cartridge Slot)
@@ -38,9 +30,8 @@
 #endif
 
 // ---------------------------------------------------------------------------
-// Pin Definitions (Target Specific)
+// Pin Definitions (NodeMCU DevKit V1 / ESP32-WROOM)
 // ---------------------------------------------------------------------------
-#if HARDWARE_TARGET == TARGET_NODEMCU
 // Data Bus (D0-D7)
 #define PIN_D0 4
 #define PIN_D1 5
@@ -63,30 +54,6 @@ static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 16, 17, 18, 19};
 #define DBUS_MASK                                                        \
     ((1UL << 4) | (1UL << 5) | (1UL << 13) | (1UL << 14) | (1UL << 16) | \
      (1UL << 17) | (1UL << 18) | (1UL << 19))
-#else  // PICO_D4 target (Optimized for SiP pinout, avoiding Flash pins)
-// Data Bus (D0-D7) - GPIO 16/17 avoided (internal Flash)
-#define PIN_D0     4
-#define PIN_D1     5
-#define PIN_D2     13
-#define PIN_D3     14
-#define PIN_D4     18
-#define PIN_D5     19
-#define PIN_D6     21
-#define PIN_D7     22
-// Address Bus (High Bits) - Using Input-Only pins 37/38
-#define PIN_A6     37
-#define PIN_A7     38
-// PBI / Control
-#define PIN_SEL_N  23
-#define PIN_VCS    27
-#define PIN_ROMSEL 25
-
-static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 18, 19, 21, 22};
-
-#define DBUS_MASK                                                        \
-    ((1UL << 4) | (1UL << 5) | (1UL << 13) | (1UL << 14) | (1UL << 18) | \
-     (1UL << 19) | (1UL << 21) | (1UL << 22))
-#endif
 
 // Common Bus Signals
 #define PIN_PHI2   2   // 6502 Phase 2 Clock (1.79 MHz)
@@ -127,17 +94,10 @@ volatile bool vcs_enabled = (BUS_MODE == BUS_MODE_CCTL);
  */
 static inline uint8_t IRAM_ATTR decode_data(uint32_t lo)
 {
-#if HARDWARE_TARGET == TARGET_NODEMCU
     return (uint8_t)(((lo >> 4) & 1) | ((lo >> 5) & 1) << 1 |
                      ((lo >> 13) & 1) << 2 | ((lo >> 14) & 1) << 3 |
                      ((lo >> 16) & 1) << 4 | ((lo >> 17) & 1) << 5 |
                      ((lo >> 18) & 1) << 6 | ((lo >> 19) & 1) << 7);
-#else
-    return (uint8_t)(((lo >> 4) & 1) | ((lo >> 5) & 1) << 1 |
-                     ((lo >> 13) & 1) << 2 | ((lo >> 14) & 1) << 3 |
-                     ((lo >> 18) & 1) << 4 | ((lo >> 19) & 1) << 5 |
-                     ((lo >> 21) & 1) << 6 | ((lo >> 22) & 1) << 7);
-#endif
 }
 
 /**
@@ -149,12 +109,7 @@ static inline uint8_t IRAM_ATTR decode_addr_low(uint32_t lo, uint32_t hi)
     uint8_t a = (uint8_t)(((hi >> 2) & 1) | ((hi >> 3) & 1) << 1 |
                           ((hi >> 4) & 1) << 2 | ((hi >> 7) & 1) << 3 |
                           ((hi >> 0) & 1) << 4 | ((hi >> 1) & 1) << 5);
-#if HARDWARE_TARGET == TARGET_NODEMCU
     a |= ((lo >> 21) & 1) << 6 | ((lo >> 27) & 1) << 7;  // A6-A7 on GPIO 21, 27
-#else
-    a |= ((hi >> 5) & 1) << 6 | ((hi >> 6) & 1)
-                                    << 7;  // A6-A7 on GPIO 37, 38 (Input1 bank)
-#endif
     return a;
 }
 
