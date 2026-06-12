@@ -7,7 +7,7 @@ LD65 = $(CC65_HOME)ld65
 
 # Nome del file sorgente assembly
 ASM_SRC = \
-	src/pbi-driver.s
+	src/vera_pbi_handler.s
 
 # Nomi dei file intermedi e finali
 OBJ_NAME = pbi-driver
