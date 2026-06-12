@@ -1,14 +1,14 @@
 /**
- * 6502_monitor -- Optimized ESP32 Monitor & RAM Emulator ($D600-$D7FF)
+ * 6502_monitor -- ESP32 PBI ROM Emulator ($D800-$DFFF)
  *
  * FIRMWARE: Targets NodeMCU DevKit V1 (ESP32-WROOM).
  *
- * CORE ARCHITECTURE:
- * - Real-time Bus Monitoring: PHI2-synchronized sampling on Core 1 (IRAM).
- * - Fast Data Injection: Pre-computed GPIO LUT (Look-Up Table) for < 50ns
- * latency.
- * - Memory Emulation: 512-byte block for $D600-$D7FF range.
- * - Hardware Management: Controls Atari RESET, EXTSEL, and MPD signals.
+ * BEHAVIOUR:
+ * - ROMSEL ($D800-$DFFF): asserts MPD low; drives pbi_rom[A0-A7] on reads.
+ *   A8-A10 are not wired on this board, so the 256-byte image mirrors 8x.
+ * - EXTSEL ($D1XX / CCTL): asserted low when the internal latch is active.
+ * - Latch (PBI mode): set by writing $80 to $D1FF, cleared by writing $00.
+ * - Latch (CCTL mode): always active.
  */
 
 #include <Arduino.h>
@@ -19,9 +19,8 @@
 #include "freertos/task.h"
 
 // ---------------------------------------------------------------------------
-// Hardware & Mode Selection
-// ---------------------------------------------------------------------------
 // Bus Protocol Mode
+// ---------------------------------------------------------------------------
 #define BUS_MODE_PBI  0  // Parallel Bus Interface (Atari XL/XE)
 #define BUS_MODE_CCTL 1  // Cartridge Control (Cartridge Slot)
 
@@ -41,29 +40,19 @@
 #define PIN_D5 17
 #define PIN_D6 18
 #define PIN_D7 19
-// Address Bus (High Bits)
+// Address Bus (A6-A7)
 #define PIN_A6 21
 #define PIN_A7 27
 // PBI / Control
-#define PIN_SEL_N  22  // $D1XX page selection (Active LOW)
-#define PIN_VCS    25  // Virtual Chip Select (Active LOW Output)
-#define PIN_ROMSEL 23  // $D800-$DFFF range select (Active LOW)
-
-static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 16, 17, 18, 19};
-
-#define DBUS_MASK                                                        \
-    ((1UL << 4) | (1UL << 5) | (1UL << 13) | (1UL << 14) | (1UL << 16) | \
-     (1UL << 17) | (1UL << 18) | (1UL << 19))
-
+#define PIN_SEL_N  22  // $D1XX / CCTL selection (Active LOW, Input)
+#define PIN_ROMSEL 23  // $D800-$DFFF range select (Active LOW, Input)
+// Outputs
+#define PIN_EXTSEL 3   // Disable Atari internal memory (Active LOW, Output)
+#define PIN_MPD    0   // Math Pack Disable (Active LOW, Output)
 // Common Bus Signals
 #define PIN_PHI2   2   // 6502 Phase 2 Clock (1.79 MHz)
 #define PIN_RW     15  // Read/Write (High = Read, Low = Write)
-#define PIN_RAMSEL 26  // $D600-$D7FF range select (Active LOW)
-#define PIN_EXTSEL 3   // External Select / MPD (Active LOW Output)
-#define PIN_MPD    0   // Math Pack Disable (Active LOW Output)
-#define PIN_RESET  12  // Atari System RESET (Active LOW Output)
-
-// Common Address Pins (A0-A5)
+// Address Pins (A0-A5)
 #define PIN_A0 34
 #define PIN_A1 35
 #define PIN_A2 36
@@ -71,27 +60,27 @@ static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 16, 17, 18, 19};
 #define PIN_A4 32
 #define PIN_A5 33
 
-// ---------------------------------------------------------------------------
-// Emulated Memory & Drive LUT
-// ---------------------------------------------------------------------------
-// 512-byte RAM emulated in internal IRAM for zero-wait-state access.
-// Note: Mirroring occurs between $D6xx and $D7xx due to 8-bit addressing.
-static IRAM_ATTR uint8_t emulated_ram[512];
+static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 16, 17, 18, 19};
 
-// Drive LUT: Maps a byte value (0-255) to a 32-bit GPIO bitmask for fast
-// output.
+#define DBUS_MASK                                                          \
+    ((1UL << 4) | (1UL << 5) | (1UL << 13) | (1UL << 14) | (1UL << 16) | \
+     (1UL << 17) | (1UL << 18) | (1UL << 19))
+
+// ---------------------------------------------------------------------------
+// PBI ROM & Drive LUT
+// ---------------------------------------------------------------------------
+// 256-byte ROM image in IRAM, mirrored 8x across the 2K $D800-$DFFF range.
+static IRAM_ATTR uint8_t pbi_rom[256];
+
+// Drive LUT: byte value → 32-bit GPIO bitmask for <50ns data bus writes.
 static IRAM_ATTR uint32_t drive_lut[256];
 
-// Global state for device activation (controlled via $D1FF in PBI mode).
-volatile bool vcs_enabled = (BUS_MODE == BUS_MODE_CCTL);
+// Internal device-active latch.
+volatile bool latch_active = (BUS_MODE == BUS_MODE_CCTL);
 
 // ---------------------------------------------------------------------------
-// Decoding Helpers (IRAM resident for speed)
+// Decoding Helpers (IRAM)
 // ---------------------------------------------------------------------------
-
-/**
- * Decodes the data bus bits from the 32-bit GPIO_IN_REG value.
- */
 static inline uint8_t IRAM_ATTR decode_data(uint32_t lo)
 {
     return (uint8_t)(((lo >> 4) & 1) | ((lo >> 5) & 1) << 1 |
@@ -100,36 +89,26 @@ static inline uint8_t IRAM_ATTR decode_data(uint32_t lo)
                      ((lo >> 18) & 1) << 6 | ((lo >> 19) & 1) << 7);
 }
 
-/**
- * Decodes the address bus bits (A0-A7) from GPIO_IN_REG and GPIO_IN1_REG.
- */
-static inline uint8_t IRAM_ATTR decode_addr_low(uint32_t lo, uint32_t hi)
+static inline uint8_t IRAM_ATTR decode_addr(uint32_t lo, uint32_t hi)
 {
-    // A0-A5 (GPIO 34, 35, 36, 39, 32, 33)
     uint8_t a = (uint8_t)(((hi >> 2) & 1) | ((hi >> 3) & 1) << 1 |
                           ((hi >> 4) & 1) << 2 | ((hi >> 7) & 1) << 3 |
                           ((hi >> 0) & 1) << 4 | ((hi >> 1) & 1) << 5);
-    a |= ((lo >> 21) & 1) << 6 | ((lo >> 27) & 1) << 7;  // A6-A7 on GPIO 21, 27
+    a |= ((lo >> 21) & 1) << 6 | ((lo >> 27) & 1) << 7;  // A6-A7: GPIO 21, 27
     return a;
 }
 
-/**
- * Drives a byte value onto the ESP32 GPIOs configured as data bus.
- */
 static inline void IRAM_ATTR bus_drive(uint8_t val)
 {
     uint32_t m       = drive_lut[val];
-    GPIO.out_w1tc    = DBUS_MASK & ~m;  // Clear bits that are 0 in mask
-    GPIO.out_w1ts    = m;               // Set bits that are 1 in mask
-    GPIO.enable_w1ts = DBUS_MASK;       // Switch GPIOs to Output mode
+    GPIO.out_w1tc    = DBUS_MASK & ~m;
+    GPIO.out_w1ts    = m;
+    GPIO.enable_w1ts = DBUS_MASK;
 }
 
-/**
- * Releases the data bus (sets GPIOs to High-Z / Input mode).
- */
 static inline void IRAM_ATTR bus_release()
 {
-    GPIO.enable_w1tc = DBUS_MASK;  // Switch GPIOs to Input mode
+    GPIO.enable_w1tc = DBUS_MASK;
 }
 
 // ============================================================================
@@ -138,156 +117,104 @@ static inline void IRAM_ATTR bus_release()
 void IRAM_ATTR MonitorTask(void *pvParameters)
 {
     uint32_t lo, hi;
-    uint8_t  addr, data;
+    uint8_t  addr;
 
-    // Pre-calculate bitmasks for frequently used signals
-    const uint32_t m_phi2 = (1UL << PIN_PHI2);
-    const uint32_t m_rw   = (1UL << PIN_RW);
-    const uint32_t m_sel  = (1UL << PIN_SEL_N);
-    const uint32_t m_vcs  = (1UL << PIN_VCS);
-
-#if BUS_MODE == BUS_MODE_PBI
+    const uint32_t m_phi2   = (1UL << PIN_PHI2);
+    const uint32_t m_rw     = (1UL << PIN_RW);
+    const uint32_t m_sel    = (1UL << PIN_SEL_N);
     const uint32_t m_romsel = (1UL << PIN_ROMSEL);
-    const uint32_t m_ramsel = (1UL << PIN_RAMSEL);
     const uint32_t m_mpd    = (1UL << PIN_MPD);
     const uint32_t m_extsel = (1UL << PIN_EXTSEL);
 
-    // Initial State: Device IDLE, Signals HIGH
-    GPIO.out_w1ts = m_vcs | m_mpd | m_extsel;
-#else
-    GPIO.out_w1ts = m_vcs;
-#endif
+    // Initial state: outputs inactive (HIGH)
+    GPIO.out_w1ts = m_mpd | m_extsel;
 
     while (true)
     {
-        // 1. SYNC: Wait for PHI2 Rising Edge (Start of 6502 cycle)
+        // 1. Sync on PHI2 rising edge
         while (!(GPIO.in & m_phi2))
             ;
 
-        // 2. SAMPLE: Capture Address Bus and Control Signals
+        // 2. Sample address and control lines
         lo   = GPIO.in;
         hi   = GPIO.in1.val;
-        addr = decode_addr_low(lo, hi);
+        addr = decode_addr(lo, hi);
+
+        // 3. ROMSEL active ($D800-$DFFF): assert MPD, serve ROM on reads
+        if (!(lo & m_romsel))
+        {
+            GPIO.out_w1tc = m_mpd;
+            if (lo & m_rw)
+                bus_drive(pbi_rom[addr]);
+        }
+        else
+        {
+            GPIO.out_w1ts = m_mpd;
+        }
+
+        // 4. SEL_N active ($D1XX / CCTL): assert EXTSEL if latch is set
+        if (!(lo & m_sel))
+        {
+            if (latch_active)
+                GPIO.out_w1tc = m_extsel;
 
 #if BUS_MODE == BUS_MODE_PBI
-        // --- PBI PROTOCOL HANDLER ---
-
-        // Logic for Device Activation via $D1FF write
-        if (!(lo & m_sel))
-        {
-            if (!(lo & m_rw) && (addr == 0xFF))
+            // Latch control: CPU writes $80→enable, $00→disable at $D1FF
+            if (!(lo & m_rw) && addr == 0xFF)
             {
-                // Sampling data for device config
-                data = decode_data(GPIO.in);
-                if (data == 0x80)
-                {
-                    vcs_enabled   = true;
-                    GPIO.out_w1tc = m_vcs;
-                }  // Enable Device
-                else if (data == 0x00)
-                {
-                    vcs_enabled   = false;
-                    GPIO.out_w1ts = m_vcs;
-                }  // Disable Device
+                uint8_t data = decode_data(GPIO.in);
+                latch_active = (data == 0x80);
+                if (!latch_active)
+                    GPIO.out_w1ts = m_extsel;
             }
-        }
-
-        if (vcs_enabled)
-        {
-            bool is_ram = !(lo & m_ramsel);  // $D600-$D7FF range
-            bool is_rom = !(lo & m_romsel);  // $D800-$DFFF range
-            bool is_sel = !(lo & m_sel);     // $D1XX page
-
-            // Assert EXTSEL to disable internal Atari memory if we are
-            // responding
-            if (is_ram || is_rom || is_sel)
-                GPIO.out_w1tc = m_extsel;
-            else
-                GPIO.out_w1ts = m_extsel;
-
-            // Assert MPD if accessing ROM range (prevents Math Pack conflict)
-            if (is_rom)
-                GPIO.out_w1tc = m_mpd;
-            else
-                GPIO.out_w1ts = m_mpd;
-
-            // Handle Emulated RAM ($D600-$D7FF)
-            if (is_ram)
-            {
-                // Mirroring Note: Without A8 pin, D6xx and D7xx share the same
-                // 256 bytes
-                if (lo & m_rw)
-                {
-                    bus_drive(emulated_ram[addr]);
-                }
-                else
-                {
-                    // Wait for data to become valid on the bus (6502 write
-                    // timing)
-                    delayMicroseconds(0);
-                    emulated_ram[addr] = decode_data(GPIO.in);
-                }
-            }
-        }
-        else
-        {
-            // Device Disabled: Ensure all output signals are High (Inactive)
-            GPIO.out_w1ts = m_extsel | m_mpd;
-        }
-#else
-        // --- CCTL (CART) MODE HANDLER ---
-        if (!(lo & m_sel))
-            GPIO.out_w1tc = m_vcs;
-        else
-            GPIO.out_w1ts = m_vcs;
 #endif
+        }
+        else
+        {
+            GPIO.out_w1ts = m_extsel;
+        }
 
-        // 3. RELEASE: Wait for PHI2 Falling Edge (End of cycle)
+        // 5. PHI2 falling edge: release data bus
         while (GPIO.in & m_phi2)
             ;
-        bus_release();  // Tri-state the bus immediately
+        bus_release();
     }
 }
 
 // ============================================================================
-// System Setup
+// Setup
 // ============================================================================
 void setup()
 {
-    // Hold Atari in RESET during ESP32 boot
-    pinMode(PIN_RESET, OUTPUT);
-    digitalWrite(PIN_RESET, LOW);
-
-    // Serial Debug (TX Only to free GPIO 3 if needed)
     Serial.begin(115200, SERIAL_8N1, -1, 1);
-    Serial.println("\n[6502_monitor] System Booting...");
+    Serial.println("\n[6502_monitor] PBI ROM Emulator booting...");
 
-    // Build Drive LUT for fast GPIO manipulation
+    // Build drive LUT
     for (int i = 0; i < 256; i++)
     {
         uint32_t m = 0;
         for (int b = 0; b < 8; b++)
-        {
             if ((i >> b) & 1) m |= (1UL << DBUS_PINS[b]);
-        }
         drive_lut[i] = m;
     }
 
-    // Initialize Control Outputs
-    pinMode(PIN_EXTSEL, OUTPUT);
-    digitalWrite(PIN_EXTSEL, HIGH);
+    // ROM placeholder: all NOP ($EA)
+    memset(pbi_rom, 0xEA, sizeof(pbi_rom));
+
+    // Control outputs: inactive (HIGH)
     pinMode(PIN_MPD, OUTPUT);
     digitalWrite(PIN_MPD, HIGH);
-    pinMode(PIN_VCS, OUTPUT);
-    digitalWrite(PIN_VCS, HIGH);
+    pinMode(PIN_EXTSEL, OUTPUT);
+    digitalWrite(PIN_EXTSEL, HIGH);
 
-    // Initialize Data Bus as Inputs
+    // Data bus: high-impedance inputs initially
     for (int i = 0; i < 8; i++) pinMode(DBUS_PINS[i], INPUT);
 
-    // Initialize Address and Clock Inputs
-    pinMode(PIN_PHI2, INPUT);
-    pinMode(PIN_RW, INPUT);
-    pinMode(PIN_SEL_N, INPUT);
+    // Address and bus control inputs
+    pinMode(PIN_PHI2,   INPUT);
+    pinMode(PIN_RW,     INPUT);
+    pinMode(PIN_SEL_N,  INPUT);
+    pinMode(PIN_ROMSEL, INPUT);
     pinMode(PIN_A0, INPUT);
     pinMode(PIN_A1, INPUT);
     pinMode(PIN_A2, INPUT);
@@ -297,23 +224,13 @@ void setup()
     pinMode(PIN_A6, INPUT);
     pinMode(PIN_A7, INPUT);
 
-#if BUS_MODE == BUS_MODE_PBI
-    pinMode(PIN_ROMSEL, INPUT);
-    pinMode(PIN_RAMSEL, INPUT);
-#endif
-
-    // Start high-priority MonitorTask on Core 1
     xTaskCreatePinnedToCore(MonitorTask, "Monitor", 4096, NULL,
                             configMAX_PRIORITIES - 1, NULL, 1);
 
-    // Allow system to stabilize before releasing Atari
-    delay(100);
-    digitalWrite(PIN_RESET, HIGH);
-    Serial.println("[6502_monitor] Atari RESET Released.");
+    Serial.println("[6502_monitor] Running.");
 }
 
 void loop()
 {
-    // System housekeeping loop
     delay(1000);
 }
