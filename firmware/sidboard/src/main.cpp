@@ -288,7 +288,7 @@ void loop()
     }
 
     LogEvt evt;
-    while (xQueueReceive(log_queue, &evt, 0) == pdTRUE)
+    if (xQueueReceive(log_queue, &evt, 0) == pdTRUE)
     {
         uint32_t sec = (uint32_t)(evt.ts_us / 1000000ULL);
         uint32_t us  = (uint32_t)(evt.ts_us % 1000000ULL);
