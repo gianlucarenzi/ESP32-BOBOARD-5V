@@ -1,10 +1,10 @@
-# 6502 Monitor - ESP32 Pin Mapping Reference (Atari 130XE Validated)
+# 6502 Monitor — ESP32 Pin Mapping (NodeMCU DevKit V1)
 
 ## 1. Data Bus (Bidirectional)
 | 6502 Signal | ESP32 GPIO | Board Label |
 | :--- | :--- | :--- |
-| **D0** | GPIO 4 | D4 |
-| **D1** | GPIO 5 | D5 |
+| **D0** | GPIO 4  | D4  |
+| **D1** | GPIO 5  | D5  |
 | **D2** | GPIO 13 | D13 |
 | **D3** | GPIO 14 | D14 |
 | **D4** | GPIO 16 | RX2 |
@@ -12,42 +12,37 @@
 | **D6** | GPIO 18 | D18 |
 | **D7** | GPIO 19 | D19 |
 
-## 2. Address Bus (Inputs)
-| 6502 Signal | ESP32 GPIO | Board Label | Characteristics |
+## 2. Address Bus (Inputs — A0-A7 decoded, A8-A10 not wired)
+| 6502 Signal | ESP32 GPIO | Board Label | Note |
 | :--- | :--- | :--- | :--- |
 | **A0** | GPIO 34 | D34 | **Input Only** |
 | **A1** | GPIO 35 | D35 | **Input Only** |
-| **A2** | GPIO 36 | VP | **Input Only** |
-| **A3** | GPIO 39 | VN | **Input Only** |
+| **A2** | GPIO 36 | VP  | **Input Only** |
+| **A3** | GPIO 39 | VN  | **Input Only** |
 | **A4** | GPIO 32 | D32 | |
 | **A5** | GPIO 33 | D33 | |
 | **A6** | GPIO 21 | D21 | |
 | **A7** | GPIO 27 | D27 | |
 
 ## 3. Control Signals
-| 6502 Signal | ESP32 GPIO | Board Label | Dir | Description |
+| Signal | ESP32 GPIO | Board Label | Dir | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **PHI2** | GPIO 2 | D2 | IN | System Clock |
-| **R/W** | GPIO 15 | D15 | IN | Read/Write |
-| **SEL_N** | GPIO 22 | D22 | IN | D1XX_N or CCTL_N |
-| **ROMSEL** | GPIO 23 | D23 | IN | $D800-$DFFF Range Select |
-| **RAMSEL** | GPIO 26 | D26 | IN | $D600-$D7FF Range Select |
-| **EXTSEL** | GPIO 3 | **RX0** | OUT | Disable Atari Memory (Active Low) |
-| **VCS** | GPIO 25 | D25 | OUT | Device Select (Active Low) |
-| **MPD** | **GPIO 0** | **BOOT**| OUT | Math Pack Disable (Active Low) |
-| **RESET** | **GPIO 12** | **D12** | OUT | **Atari RESET Control** (Active Low) |
+| **PHI2**   | GPIO 2  | D2       | IN  | 6502 System Clock (1.79 MHz) |
+| **R/W**    | GPIO 15 | D15      | IN  | Read/Write |
+| **SEL\_N** | GPIO 22 | D22      | IN  | $D1XX or CCTL selection (Active Low) |
+| **ROMSEL** | GPIO 23 | D23      | IN  | $D800–$DFFF range (Active Low) |
+| **EXTSEL** | GPIO 3  | **RX0**  | OUT | Disable Atari internal memory (Active Low) |
+| **MPD**    | GPIO 0  | **BOOT** | OUT | Math Pack Disable (Active Low) |
 
-## 4. System
+## 4. Serial Debug
 | Signal | ESP32 GPIO | Board Label | Description |
 | :--- | :--- | :--- | :--- |
-| **Debug TX** | GPIO 1 | TX0 | Serial output (115200 bps) |
-| **GND** | GND | GND | Common Ground |
+| **TX** | GPIO 1 | TX0 | Console output (115200 bps) |
 
 ---
 
-## ⚠️ Hardware Validation & Boot Sequence
-1. **Level Shifters:** All I/O signals between Atari and ESP32 are passed through **TXS0108E bidirectional level shifters**. These are critical for boot stability, as they ensure high-impedance isolation of the Atari's pull-up resistors during the ESP32's power-on/boot sequence, preventing strapping conflicts on GPIO 0, 12, etc.
-2. **Startup:** Upon power-on, the ESP32 immediately pulls **GPIO 12 (RESET)** LOW, holding the Atari 130XE in reset.
-3. **GPIO 0 (MPD):** The Atari's internal pull-up (isolated by level shifter) ensures GPIO 0 remains HIGH, allowing the ESP32 to boot normally.
-4. **Initialization:** The ESP32 configures all GPIOs and starts the 1.79 MHz MonitorTask.
-5. **Release:** After 100ms, the ESP32 drives **GPIO 12** HIGH, allowing the Atari to start its boot process.
+## Notes
+- **A8–A10 not wired**: the 256-byte ROM image mirrors 8× across the 2 KB $D800–$DFFF range.
+- **GPIO 0 (MPD / BOOT)**: the Atari's internal pull-up (isolated by the TXS0108E level shifter) keeps GPIO 0 HIGH during ESP32 power-on, allowing normal boot.
+- **GPIO 3 (EXTSEL / RX0)**: shared with the UART RX pin; not usable for serial input while the firmware is running.
+- All I/O signals between Atari and ESP32 pass through **TXS0108E bidirectional level shifters**.

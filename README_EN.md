@@ -58,12 +58,11 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - **Status LEDs** and control buttons
 
 ### Firmware
-- **High-speed 6502 bus monitoring**
+- **PBI ROM Emulator** ($D800–$DFFF, 2 KB — 256-byte image mirrored ×8)
 - **Dual-core processing** (Core 0: Serial, Core 1: Monitor)
-- **Complete PBI implementation** with device selection
-- **Shadow RAM** for memory emulation
-- **Colored debug output** via serial
-- **Automatic GPIO testing** for hardware validation
+- **MPD** asserted on ROMSEL access
+- **EXTSEL** asserted on $D1XX access when internal latch is active
+- **Internal latch** controlled via $D1FF write ($80 = enable, $00 = disable)
 
 ## 🔧 Technical Specifications
 
@@ -86,17 +85,13 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 |---------|-----------|-------------|
 | **D0-D7** | GPIO4, GPIO5, GPIO13, GPIO14, GPIO16, GPIO17, GPIO18, GPIO19 | Data Bus (Bidirectional) |
 | **A0-A3** | GPIO34, GPIO35, GPIO36, GPIO39 | Address Bus LSB (Input Only) |
-| **A4-A5** | GPIO32, GPIO33 | Address Bus |
-| **A6-A7** | GPIO21, GPIO27 | Address Bus |
-| **PHI2** | GPIO2 | 6502 processor clock |
+| **A4-A7** | GPIO32, GPIO33, GPIO21, GPIO27 | Address Bus |
+| **PHI2** | GPIO2 | 6502 clock (1.79 MHz) |
 | **R/W** | GPIO15 | Read/Write |
 | **SEL_N** | GPIO22 | $D1XX / CCTL selection (Active Low, Input) |
-| **ROMSEL** | GPIO23 | $D800-$DFFF range select (Input) |
-| **RAMSEL** | GPIO26 | $D600-$D7FF range select (Input) |
+| **ROMSEL** | GPIO23 | $D800–$DFFF range (Active Low, Input) |
 | **EXTSEL** | GPIO3 (RX0) | Disable Atari internal memory (Active Low, Output) |
-| **VCS** | GPIO25 | Device Select (Active Low, Output) |
 | **MPD** | GPIO0 (BOOT) | Math Pack Disable (Active Low, Output) |
-| **RESET** | GPIO12 | Atari RESET control (Active Low, Output) |
 
 ## 🎨 3D Visualization
 
@@ -216,20 +211,11 @@ static inline uint16_t read_address_bus(void) {
 ```
 
 #### 2. PBI Implementation
-- **Device Selection**: $D1FF register for device selection
-- **I/O Registers**: $D100-$D1F0 for communication
-- **Shadow RAM**: $D600-$D7FF for shared memory
-- **ROM Driver**: $D800-$DFFF for PBI code
 
-#### 3. Memory Management
-
-| Address Range | Function | Access |
-|----------------|----------|---------|
-| **$D100-$D1F0** | PBI I/O Registers | R/W |
-| **$D1FF** | Device Selection | R/W |
-| **$D500-$D5FF** | Cartridge Control | R/W |
-| **$D600-$D7FF** | Shadow RAM | R/W |
-| **$D800-$DFFF** | PBI ROM Driver | R |
+| Address Range | Function | Notes |
+|----------------|----------|-------|
+| **$D1FF** | Latch control (W: $80=on, $00=off) | PBI mode only |
+| **$D800–$DFFF** | PBI ROM 2 KB (read only) | 256-byte image, mirrored ×8 |
 
 ### Operating Modes
 

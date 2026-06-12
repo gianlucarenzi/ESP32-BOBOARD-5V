@@ -2,58 +2,45 @@
 
 **Hardware**: ESP32-BOBOARD-5V (NodeMCU-32S + 3× TXS0108EPW level shifters)  
 **Atari target**: 800XL PBI / 65XE-130XE ECI+CART  
-**MCU**: ESP32 (3.3 V)
+**MCU**: ESP32-WROOM (3.3 V)
 
 ---
 
-## Mappatura Hardware (Configurazione Corrente)
+## GPIO Assignment (Firmware)
 
-Questa è la configurazione fisica dei segnali sul connettore **J3**, traslati a 5V tramite i level shifter **U1**, **U3** e **U4**.
-
-### Segnali Debug / Programmazione
-I seguenti pin sono collegati **solo** al connettore di debug e **non** passano attraverso i level shifter verso l'Atari:
-*   **TX0 (GPIO 1)**: Console Seriale Out (printf / Log)
-*   **RX0 (GPIO 3)**: Console Seriale In (Programmazione / Comandi)
-
----
-
-## Tabella Connettore J3 (Atari ↔ BOBOARD)
-
-| Pin J3 | Segnale Atari | GPIO ESP32 | IC Shifter | Note |
-| :---: | :--- | :---: | :---: | :--- |
-| **1** | **D0** | **2** | U1 | Bus Dati (Bidirezionale) |
-| **2** | **D1** | **4** | U1 | |
-| **3** | **D2** | **5** | U1 | |
-| **4** | **D3** | **12** | U1 | |
-| **5** | **D4** | **13** | U1 | |
-| **6** | **D5** | **14** | U1 | |
-| **7** | **D6** | **15** | U1 | |
-| **8** | **D7** | **18** | U1 | |
-| **9** | **~MPD** | **19** | U3 | Math Pack Disable (Output) |
-| **10** | **~EXTSEL** | **21** | U3 | External Select (Output) |
-| **11** | **A8** | **22** | U3 | Address MSB (Input) |
-| **12** | **PHI2** | **23** | U3 | Clock Atari (Input) |
-| **13** | **R/~W** | **25** | U3 | Direzione Bus (Input) |
-| **14** | **CCTL** | **26** | U3 | Selezione $D5xx (Input) |
-| **15** | **~D1XX** | **27** | U3 | Selezione $D1xx (Input) |
-| **16** | **A0** | **32** | U3 | Indirizzo LSB |
-| **17** | **A1** | **33** | U4 | |
-| **18** | **A2** | **34** | U4 | |
-| **19** | **A3** | **35** | U4 | |
-| **20** | **A4** | **36** | U4 | |
-| **21** | **A5** | **39** | U4 | |
-| **22** | **A6** | **16** | U4 | |
-| **23** | **A7** | **17** | U4 | |
-| **24, 25**| **NC** | — | — | Non collegati |
-| **26** | **EN** | — | — | Reset ESP32 (Tasto Enable) |
-| **27, 28**| **3.3V** | — | — | Alimentazione regolata |
-| **29, 30**| **GND** | — | — | Massa comune |
-| **31, 32**| **5V** | — | — | Alimentazione dall'Atari |
+| Segnale | GPIO ESP32 | Etichetta Board | Dir | Descrizione |
+| :--- | :---: | :--- | :---: | :--- |
+| **D0** | 4  | D4       | I/O | Bus Dati bit 0 |
+| **D1** | 5  | D5       | I/O | Bus Dati bit 1 |
+| **D2** | 13 | D13      | I/O | Bus Dati bit 2 |
+| **D3** | 14 | D14      | I/O | Bus Dati bit 3 |
+| **D4** | 16 | RX2      | I/O | Bus Dati bit 4 |
+| **D5** | 17 | TX2      | I/O | Bus Dati bit 5 |
+| **D6** | 18 | D18      | I/O | Bus Dati bit 6 |
+| **D7** | 19 | D19      | I/O | Bus Dati bit 7 |
+| **A0** | 34 | D34      | IN  | Bus Indirizzi bit 0 (**Input Only**) |
+| **A1** | 35 | D35      | IN  | Bus Indirizzi bit 1 (**Input Only**) |
+| **A2** | 36 | VP       | IN  | Bus Indirizzi bit 2 (**Input Only**) |
+| **A3** | 39 | VN       | IN  | Bus Indirizzi bit 3 (**Input Only**) |
+| **A4** | 32 | D32      | IN  | Bus Indirizzi bit 4 |
+| **A5** | 33 | D33      | IN  | Bus Indirizzi bit 5 |
+| **A6** | 21 | D21      | IN  | Bus Indirizzi bit 6 |
+| **A7** | 27 | D27      | IN  | Bus Indirizzi bit 7 |
+| **PHI2**   | 2  | D2       | IN  | Clock 6502 (1.79 MHz) |
+| **R/W**    | 15 | D15      | IN  | Read/Write |
+| **SEL\_N** | 22 | D22      | IN  | Selezione $D1XX / CCTL (Active Low) |
+| **ROMSEL** | 23 | D23      | IN  | Range $D800–$DFFF (Active Low) |
+| **EXTSEL** | 3  | **RX0**  | OUT | Disabilita memoria interna Atari (Active Low) |
+| **MPD**    | 0  | **BOOT** | OUT | Math Pack Disable (Active Low) |
+| **TX debug** | 1 | TX0    | OUT | Console seriale (115200 bps) |
 
 ---
 
-## Dettagli Tecnici Ottimizzazione
+## Note Tecniche
 
-*   **Bus Dati**: Poiché i GPIO su **U1** non sono contigui, il firmware utilizza una **LUT (Look-Up Table)** di 256 byte per scrivere sul bus alla massima velocità possibile.
-*   **Bus Indirizzi**: Gli indirizzi da **A0** a **A5** sono raggruppati nel registro `GPIO_IN1_REG` (GPIO 32-39), permettendo una lettura atomica molto veloce durante il ciclo di clock dell'Atari.
-*   **Stabilità**: Il pin **GPIO 0** (necessario per il boot) non è utilizzato nel bus Atari per evitare che la macchina entri in modalità programmazione accidentalmente all'accensione.
+- **A8–A10 non collegati**: i segnali di indirizzo superiori del range $D800–$DFFF non sono cablati sul connettore. La ROM da 256 byte si replica (mirror) 8× nel range da 2 KB.
+- **GPIO 0 (MPD/BOOT)**: il pull-up interno dell'Atari (isolato dal TXS0108E) mantiene GPIO 0 alto durante il boot dell'ESP32, garantendo l'avvio normale.
+- **GPIO 3 (EXTSEL/RX0)**: condiviso con il pin RX della UART; non utilizzabile per input seriale durante l'esecuzione del firmware.
+- **Bus Dati (LUT)**: poiché i GPIO del data bus non sono contigui, il firmware usa una LUT da 256 entry precalcolata per scrivere sul bus alla massima velocità possibile.
+- **Bus Indirizzi (A0–A5)**: ricadono nel registro `GPIO_IN1_REG` (GPIO 32–39), permettendo una lettura atomica in un singolo ciclo di clock.
+- Tutti i segnali Atari↔ESP32 passano attraverso i **TXS0108EPW** (level shifter bidirezionale 3.3 V / 5 V).

@@ -5,59 +5,55 @@
 \geometry{margin=1in}
 \usepackage{booktabs}
 
-\title{6502 Monitor - ESP32 Pin Mapping (Atari 130XE Validated)}
+\title{6502 Monitor -- ESP32 Pin Mapping (NodeMCU DevKit V1)}
 \author{Atari ESP32 Project}
 \date{\today}
 
 \begin{document}
 \maketitle
 
-\section{Overview}
-Final pin assignment for ESP32 NodeMCU DevKit V1. Includes Atari RESET control to ensure synchronized startup.
-
-\section{Data Bus (Bank 0)}
+\section{Data Bus (Bidirectional)}
 \begin{table}[h!]
 \centering
 \begin{tabular}{@{}lll@{}}
 \toprule
 \textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} \\ \midrule
-D0-D7                & GPIO 4, 5, 13, 14, 16, 17, 18, 19 & D4, D5, D13, D14, RX2, TX2, D18, D19 \\ \bottomrule
+D0--D7 & GPIO 4, 5, 13, 14, 16, 17, 18, 19 & D4, D5, D13, D14, RX2, TX2, D18, D19 \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Address Bus}
+\section{Address Bus (A0--A7 decoded; A8--A10 not wired)}
 \begin{table}[h!]
 \centering
 \begin{tabular}{@{}lll@{}}
 \toprule
 \textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} \\ \midrule
-A0-A3                & GPIO 34, 35, 36, 39 & D34, D35, VP, VN (Input Only) \\
-A4-A7                & GPIO 32, 33, 21, 27 & D32, D33, D21, D27 \\ \bottomrule
+A0--A3 & GPIO 34, 35, 36, 39 & D34, D35, VP, VN \quad (\textbf{Input Only}) \\
+A4--A7 & GPIO 32, 33, 21, 27 & D32, D33, D21, D27 \\ \bottomrule
 \end{tabular}
 \end{table}
 
 \section{Control Signals}
 \begin{table}[h!]
 \centering
-\begin{tabular}{@{}llll@{}}
+\begin{tabular}{@{}lllll@{}}
 \toprule
-\textbf{6502 Signal} & \textbf{ESP32 GPIO} & \textbf{Board Label} & \textbf{Description} \\ \midrule
-PHI2                 & GPIO 2             & D2                  & System Clock (IN) \\
-R/W                  & GPIO 15            & D15                 & Read/Write (IN) \\
-SEL\_N               & GPIO 22            & D22                 & D1XX\_N / CCTL\_N (IN) \\
-ROMSEL               & GPIO 23            & D23                 & \$D800--\$DFFF Range (IN) \\
-RAMSEL               & GPIO 26            & D26                 & \$D600--\$D7FF Range (IN) \\
-EXTSEL               & GPIO 3             & \textbf{RX0}        & Disable Atari Memory (OUT) \\
-VCS                  & GPIO 25            & D25                 & Device Select (OUT) \\
-MPD                  & \textbf{GPIO 0}    & \textbf{BOOT}       & Math Pack Disable (OUT) \\ 
-RESET                & \textbf{GPIO 12}   & \textbf{D12}        & Atari RESET Control (OUT) \\ \bottomrule
+\textbf{Signal} & \textbf{GPIO} & \textbf{Label} & \textbf{Dir} & \textbf{Description} \\ \midrule
+PHI2   & GPIO 2  & D2       & IN  & 6502 System Clock (1.79\,MHz) \\
+R/W    & GPIO 15 & D15      & IN  & Read/Write \\
+SEL\_N & GPIO 22 & D22      & IN  & \$D1XX / CCTL selection (Active Low) \\
+ROMSEL & GPIO 23 & D23      & IN  & \$D800--\$DFFF range (Active Low) \\
+EXTSEL & GPIO 3  & \textbf{RX0}  & OUT & Disable Atari internal memory (Active Low) \\
+MPD    & GPIO 0  & \textbf{BOOT} & OUT & Math Pack Disable (Active Low) \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Hardware Safety \& Boot Sequence}
+\section{Notes}
 \begin{itemize}
-    \item \textbf{Atari RESET (GPIO 12):} Held LOW immediately on power-up to keep Atari paused.
-    \item \textbf{ESP32 Boot (GPIO 0):} Safe boot via Atari's internal pull-up.
+    \item \textbf{A8--A10 not wired:} the 256-byte ROM image mirrors 8$\times$ across the 2\,KB \$D800--\$DFFF range.
+    \item \textbf{GPIO\,0 (MPD / BOOT):} kept HIGH during boot by the Atari pull-up (isolated via TXS0108E).
+    \item \textbf{GPIO\,3 (EXTSEL / RX0):} shared with UART\,RX; not usable for serial input at runtime.
+    \item All signals pass through \textbf{TXS0108E} bidirectional level shifters (3.3\,V\,$\leftrightarrow$\,5\,V).
 \end{itemize}
 
 \end{document}
