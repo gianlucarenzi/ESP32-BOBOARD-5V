@@ -19,10 +19,13 @@ C_ARRAY_FILE =$(OBJ_NAME).h
 # File di configurazione del linker
 LINK_CFG = pbi-driver.ld
 
-.PHONY: all clean
+.PHONY: all rebuild clean
 
 # Regola predefinita: compila tutto
 all: $(BIN_FILE) $(C_ARRAY_FILE)
+
+# Forza ricompilazione completa (ignora i timestamp)
+rebuild: clean all
 
 # ---
 ## Assemblaggio del Codice 6502
