@@ -5,10 +5,12 @@
  *
  * BEHAVIOUR:
  * - ROMSEL ($D800-$DFFF): asserts MPD low; drives pbi_rom[A0-A10] on reads.
- *   Full 2 KB addressing via A0-A10 (no mirroring).
- * - EXTSEL ($D1XX / CCTL): asserted low when the internal latch is active.
+ *   Full 2 KB addressing via A0-A10 (no aliasing).
+ * - EXTSEL ($D1XX): asserted low when the internal latch is active.
  * - Latch (PBI mode): set by writing $80 to $D1FF, cleared by writing $00.
  * - Latch (CCTL mode): always active.
+ * - LOG: FreeRTOS queue from Core 1 to Core 0; prints VCS latch changes
+ *   and every $D100-$D1FE read/write access.
  */
 
 #include <Arduino.h>
@@ -17,6 +19,8 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+#include <esp_timer.h>
 
 // ---------------------------------------------------------------------------
 // Bus Protocol Mode
@@ -70,6 +74,25 @@ static const uint8_t DBUS_PINS[8] = {4, 5, 13, 14, 16, 17, 18, 19};
      (1UL << 17) | (1UL << 18) | (1UL << 19))
 
 // ---------------------------------------------------------------------------
+// Log Queue (Core 1 → Core 0)
+// ---------------------------------------------------------------------------
+#define LOG_QUEUE_SIZE 64
+
+#define EVT_LATCH 0   // VCS latch state change
+#define EVT_REG   1   // $D100-$D1FE register access
+
+// flags: bit 0 = 1→write / 0→read   bit 1 = latch state (EVT_LATCH only)
+typedef struct {
+    uint64_t ts_us;   // timestamp: microseconds since boot (esp_timer_get_time())
+    uint8_t  type;
+    uint8_t  offset;  // register offset within $D1XX (0x00-0xFE)
+    uint8_t  data;
+    uint8_t  flags;
+} LogEvt;
+
+static QueueHandle_t log_queue;
+
+// ---------------------------------------------------------------------------
 // PBI ROM & Drive LUT
 // ---------------------------------------------------------------------------
 // Full 2 KB ROM image in IRAM — A0-A10 decoded, no aliasing.
@@ -95,7 +118,7 @@ static inline uint8_t IRAM_ATTR decode_data(uint32_t lo)
 // Returns an 11-bit address (A0-A10) for indexing pbi_rom[].
 static inline uint16_t IRAM_ATTR decode_addr(uint32_t lo, uint32_t hi)
 {
-    // A0-A5: GPIO_IN1_REG (GPIO 32-39 map to bits 0-7 of hi)
+    // A0-A5: GPIO_IN1_REG (GPIO 32-39 → bits 0-7 of hi)
     uint16_t a = (uint16_t)(((hi >> 2) & 1) | ((hi >> 3) & 1) << 1 |
                              ((hi >> 4) & 1) << 2 | ((hi >> 7) & 1) << 3 |
                              ((hi >> 0) & 1) << 4 | ((hi >> 1) & 1) << 5);
@@ -117,6 +140,14 @@ static inline void IRAM_ATTR bus_drive(uint8_t val)
 static inline void IRAM_ATTR bus_release()
 {
     GPIO.enable_w1tc = DBUS_MASK;
+}
+
+// Helper: enqueue a log event without blocking (drops if queue full).
+static inline void IRAM_ATTR log_send(uint8_t type, uint8_t offset,
+                                      uint8_t data, uint8_t flags)
+{
+    LogEvt evt = {(uint64_t)esp_timer_get_time(), type, offset, data, flags};
+    xQueueSend(log_queue, &evt, 0);
 }
 
 // ============================================================================
@@ -166,16 +197,34 @@ void IRAM_ATTR MonitorTask(void *pvParameters)
             if (latch_active)
                 GPIO.out_w1tc = m_extsel;
 
+            uint8_t offset = addr & 0xFF;
+
 #if BUS_MODE == BUS_MODE_PBI
-            // Latch control via $D1FF: write $80 = enable, $00 = disable
-            if (!(lo & m_rw) && (addr & 0xFF) == 0xFF)
+            if (offset == 0xFF)
             {
-                uint8_t data = decode_data(GPIO.in);
-                latch_active = (data == 0x80);
-                if (!latch_active)
-                    GPIO.out_w1ts = m_extsel;
+                // $D1FF: latch control — only on writes
+                if (!(lo & m_rw))
+                {
+                    uint8_t data     = decode_data(GPIO.in);
+                    bool    prev     = latch_active;
+                    latch_active     = (data == 0x80);
+                    if (!latch_active)
+                        GPIO.out_w1ts = m_extsel;
+                    // Log only when state changes
+                    if (latch_active != prev)
+                        log_send(EVT_LATCH, 0xFF, data,
+                                 latch_active ? 0x02 : 0x00);
+                }
             }
+            else
 #endif
+            {
+                // $D100-$D1FE: VERA register access — log R and W
+                // Re-read GPIO.in so VERA has had time to put read data on bus.
+                uint8_t data  = decode_data(GPIO.in);
+                uint8_t flags = (lo & m_rw) ? 0x00 : 0x01;  // 0=read, 1=write
+                log_send(EVT_REG, offset, data, flags);
+            }
         }
         else
         {
@@ -196,6 +245,9 @@ void setup()
 {
     Serial.begin(115200, SERIAL_8N1, -1, 1);
     Serial.println("\n[6502_monitor] PBI ROM Emulator booting...");
+
+    // Create log queue before starting MonitorTask
+    log_queue = xQueueCreate(LOG_QUEUE_SIZE, sizeof(LogEvt));
 
     // Build drive LUT
     for (int i = 0; i < 256; i++)
@@ -239,9 +291,33 @@ void setup()
                             configMAX_PRIORITIES - 1, NULL, 1);
 
     Serial.println("[6502_monitor] Running.");
+    Serial.println("[6502_monitor] VCS=OFF  Latch=DISABLED");
 }
 
+// ============================================================================
+// Loop -- Core 0: drain log queue and print
+// ============================================================================
 void loop()
 {
-    delay(1000);
+    LogEvt evt;
+    while (xQueueReceive(log_queue, &evt, pdMS_TO_TICKS(10)) == pdTRUE)
+    {
+        uint32_t sec = (uint32_t)(evt.ts_us / 1000000ULL);
+        uint32_t us  = (uint32_t)(evt.ts_us % 1000000ULL);
+        if (evt.type == EVT_LATCH)
+        {
+            bool enabled = (evt.flags & 0x02) != 0;
+            Serial.printf("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to $D1FF)\n",
+                          sec, us,
+                          enabled ? "ENABLED " : "DISABLED", evt.data);
+        }
+        else  // EVT_REG
+        {
+            Serial.printf("[%5lu.%06lu] [D1%02X] %c $%02X\n",
+                          sec, us,
+                          evt.offset,
+                          (evt.flags & 0x01) ? 'W' : 'R',
+                          evt.data);
+        }
+    }
 }

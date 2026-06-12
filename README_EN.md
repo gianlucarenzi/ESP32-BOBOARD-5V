@@ -59,10 +59,11 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 
 ### Firmware
 - **PBI ROM Emulator** ($D800–$DFFF, 2 KB — full A0-A10 decode, no aliasing)
-- **Dual-core processing** (Core 0: Serial, Core 1: Monitor)
+- **Dual-core processing** (Core 0: Serial/Log, Core 1: Monitor bus)
 - **MPD** asserted on ROMSEL access
 - **EXTSEL** asserted on $D1XX access when internal latch is active
 - **Internal latch** controlled via $D1FF write ($80 = enable, $00 = disable)
+- **FreeRTOS queue** (Core 1 → Core 0): logs VCS latch state changes and every $D100–$D1FE access with microsecond timestamps
 
 ## 🔧 Technical Specifications
 
@@ -234,18 +235,18 @@ static inline uint16_t read_address_bus(void) {
 ```ini
 -D BUS_MODE=0  ; BUS_MODE_PBI
 ```
-- Full Atari PBI device emulation
-- Handles D1XX, ROMSEL, RAMSEL, MPD, EXTSEL signals
-- 512-byte RAM emulation ($D600-$D7FF)
-- Activation via write to $D1FF
+- Atari PBI device emulation
+- ROMSEL ($D800–$DFFF): asserts MPD, serves ROM bytes on reads (A0-A10)
+- SEL_N ($D1XX): asserts EXTSEL when latch is active
+- VCS latch: enabled by writing `$80` to $D1FF, disabled by `$00`
 
 #### CCTL Mode (Cartridge)
 ```ini
 -D BUS_MODE=1  ; BUS_MODE_CCTL
 ```
 - Simplified Cartridge Control mode
-- VCS always active
-- Does not use MPD, ROMSEL, RAMSEL, EXTSEL
+- Latch always active (EXTSEL always asserted on $D1XX)
+- $D1FF is not treated as latch control
 
 ## 🚀 Installation and Setup
 
@@ -303,23 +304,24 @@ pio device monitor
 
 ### Serial Output
 
-The firmware produces colored output to facilitate debugging:
+Core 0 drains the FreeRTOS queue sent by Core 1 and prints each event.
+Timestamp format is `[seconds.microseconds]`:
 
 ```
-🔵 6502 Bus Monitor Ready on Core 1
-🟡 CCTL: Send $FF from $D500 to CPU
-🟢 PBI I/O: Device $01 selected
-🔴 PBI Read or Write @ $D150 address. Device must be selected first!
-🟡 Shadow RAM: Received $42 to $D600 from CPU
+[6502_monitor] PBI ROM Emulator booting...
+[6502_monitor] Running.
+[6502_monitor] VCS=OFF  Latch=DISABLED
+[    0.012345] [VCS ] Latch ENABLED  ($80 written to $D1FF)
+[    0.012346] [D100] R $00
+[    0.012390] [D103] W $FF
+[    1.234567] [D104] W $00
+[    1.234600] [VCS ] Latch DISABLED ($00 written to $D1FF)
 ```
 
-### Debug Commands
-
-The system supports different debug levels:
-- `DBG_ERROR`: Critical errors only
-- `DBG_INFO`: General information
-- `DBG_VERBOSE`: Detailed debug
-- `DBG_NOISY`: All messages
+- `[VCS ]` — latch state change: `ENABLED` / `DISABLED`
+- `[D1xx]` — VERA register access: `R` = read, `W` = write
+- Timestamp captured in Core 1 at the exact bus cycle (`esp_timer_get_time()`)
+- Events dropped when queue is full — the bus handler is never blocked
 
 ## 📈 Flow Diagrams
 
@@ -327,95 +329,66 @@ The system supports different debug levels:
 
 ```mermaid
 flowchart TD
-    A[System Startup] --> B[GPIO Initialization]
-    B --> C[Task Creation]
-    C --> D[Core 0: Serial Task]
-    C --> E[Core 1: Monitor Task]
-    
-    E --> F[Wait PHI2 Rising Edge]
-    F --> G[Read Address Bus]
-    G --> H[Read R/W Signal]
-    H --> I{Check Address Range}
-    
-    I -->|"D500-D5FF"| J[Cartridge Control]
-    I -->|"D100-D1FF"| K[PBI I/O]
-    I -->|"D600-D7FF"| L[Shadow RAM]
-    I -->|"D800-DFFF"| M[PBI ROM Driver]
-    
-    J --> N[Handle CCTL]
-    K --> O[Device Selection/Registers]
-    L --> P[Read/Write Shadow Memory]
-    M --> Q[ROM Emulation]
-    
-    N --> F
-    O --> F
-    P --> F
-    Q --> F
-    
+    A[System Startup] --> B[Init GPIO + Drive LUT]
+    B --> C[Create FreeRTOS Queue]
+    C --> D[Start MonitorTask on Core 1]
+    D --> E[Core 0: loop drains queue and Serial.printf]
+    D --> F[Core 1: wait PHI2 rising edge]
+
+    F --> G[Sample GPIO.in / GPIO.in1]
+    G --> H[Decode address A0-A10 and R/W]
+    H --> I{ROMSEL active?}
+
+    I -->|Yes D800-DFFF| J[Assert MPD]
+    J --> K{R/W = Read?}
+    K -->|Yes| L[bus_drive pbi_rom addr]
+    K -->|No| M[no data action]
+
+    I -->|No| N{SEL_N active?}
+    N -->|Yes D1XX| O{latch active?}
+    O -->|Yes| P[Assert EXTSEL]
+    O -->|No| Q[EXTSEL released]
+    P --> R{offset = $FF and Write?}
+    Q --> R
+    R -->|Yes PBI latch| S[Update latch, log EVT_LATCH if changed]
+    R -->|No D100-D1FE| T[log EVT_REG with R/W and data]
+    N -->|No| U[EXTSEL released]
+
+    L --> V[Wait PHI2 falling edge]
+    M --> V
+    S --> V
+    T --> V
+    U --> V
+    V --> W[bus_release]
+    W --> F
+
     style A fill:#e1f5fe
-    style D fill:#f3e5f5
-    style E fill:#e8f5e8
+    style E fill:#f3e5f5
+    style F fill:#e8f5e8
 ```
 
-### PBI Device Selection Protocol
+### VCS Latch Protocol (PBI Mode)
 
 ```mermaid
 sequenceDiagram
     participant CPU as 6502 CPU
-    participant ESP as ESP32 Monitor
-    participant DEV as PBI Device
-    
-    CPU->>ESP: Write Device ID to $D1FF
-    ESP->>ESP: Check Device ID
-    alt Valid Device ID
-        ESP->>DEV: Assert CS (Chip Select)
-        ESP->>CPU: ACK (Device Selected)
-        Note over ESP: cardselected = 1
-    else Invalid Device ID
-        ESP->>DEV: Deassert CS
-        ESP->>CPU: NAK (Device Not Found)
-        Note over ESP: cardselected = 0
-    end
-    
-    loop I/O Operations
-        CPU->>ESP: Access $D100-$D1F0
-        alt Device Selected
-            ESP->>DEV: Forward I/O Operation
-            DEV->>ESP: Response Data
-            ESP->>CPU: Return Data
-        else Device Not Selected
-            ESP->>CPU: Error Response
-        end
-    end
-```
+    participant ESP as ESP32 MonitorTask
+    participant Q  as FreeRTOS Queue
 
-### Shadow RAM Management
+    CPU->>ESP: Write $80 → $D1FF
+    ESP->>ESP: latch_active = true
+    ESP->>ESP: Assert EXTSEL (LOW)
+    ESP->>Q: EVT_LATCH ENABLED (timestamp µs)
 
-```mermaid
-flowchart TD
-    A["CPU Access D600-D7FF"] --> B{"Device Selected?"}
-    B -->|No| C["Ignore Access"]
-    B -->|Yes| D{"Read or Write?"}
-    
-    D -->|Read| E["Read from Shadow RAM"]
-    D -->|Write| F["Write to Shadow RAM"]
-    
-    E --> G{"Address Range"}
-    G -->|"D600-D6FF"| H["Return RAM Data"]
-    G -->|"D700-D7FF"| I["Return NOP EA"]
-    
-    F --> J["Store in ram_d600 array"]
-    
-    H --> K["Set Data Bus Output"]
-    I --> K
-    J --> L["Log Operation"]
-    K --> M["Wait PHI2 Low"]
-    L --> M
-    M --> N["Return to Monitor Loop"]
-    
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-    style D fill:#fff3e0
+    loop VERA register accesses $D100-$D1FE
+        CPU->>ESP: Read/Write $D1xx
+        ESP->>Q: EVT_REG offset data R/W (timestamp µs)
+    end
+
+    CPU->>ESP: Write $00 → $D1FF
+    ESP->>ESP: latch_active = false
+    ESP->>ESP: Release EXTSEL (HIGH)
+    ESP->>Q: EVT_LATCH DISABLED (timestamp µs)
 ```
 
 ## ⏱️ Timing
