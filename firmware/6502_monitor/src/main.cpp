@@ -7,8 +7,8 @@
  * - ROMSEL ($D800-$DFFF): asserts MPD low; drives pbi_rom[A0-A10] on reads.
  *   Full 2 KB addressing via A0-A10 (no aliasing).
  * - EXTSEL ($D1XX): asserted low when the internal latch is active.
- * - Latch (PBI mode): set by writing $80 to $D1FF, cleared by writing $00.
- * - Latch (CCTL mode): always active.
+ * - Latch (PBI mode):  set by writing $80 to $D1FF, cleared by any other value.
+ * - Latch (CCTL mode): same mechanism, latch address is $D5FF instead of $D1FF.
  * - LOG: FreeRTOS queue from Core 1 to Core 0; prints VCS latch changes
  *   and every $D100-$D1FE read/write access.
  */
@@ -21,6 +21,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include <esp_timer.h>
+#include "pbi-driver.h"
 
 // ---------------------------------------------------------------------------
 // Bus Protocol Mode
@@ -262,8 +263,8 @@ void setup()
         drive_lut[i] = m;
     }
 
-    // ROM placeholder: all NOP ($EA)
-    memset(pbi_rom, 0xEA, sizeof(pbi_rom));
+    // Load PBI driver ROM image (generated from 6502/pbi-driver.bin via pre_build.py)
+    memcpy(pbi_rom, pbi_driver, sizeof(pbi_rom));
 
     // Control outputs: inactive (HIGH)
     pinMode(PIN_MPD,    OUTPUT);
@@ -317,6 +318,9 @@ static const char *vera_reg_name(uint8_t offset, uint8_t dcsel)
     if (offset < 8)
         return base[offset];
 
+    if (offset == 0x08)
+        return "VERA_IRQLINE_L";
+
     if (offset >= 0x09 && offset <= 0x0C)
     {
         static const char *mux[7][4] = {
@@ -336,6 +340,20 @@ static const char *vera_reg_name(uint8_t offset, uint8_t dcsel)
             { "VERA_FX_CACHE_L",  "VERA_FX_CACHE_M",     "VERA_FX_CACHE_H",     "VERA_FX_CACHE_U"     },
         };
         return mux[(dcsel < 7) ? dcsel : 0][offset - 0x09];
+    }
+
+    if (offset >= 0x0D && offset <= 0x13)
+    {
+        static const char *l0[7] = {
+            "VERA_L0_CONFIG",    // $0D
+            "VERA_L0_MAPBASE",   // $0E
+            "VERA_L0_TILEBASE",  // $0F
+            "VERA_L0_HSCR_L",   // $10
+            "VERA_L0_HSCR_H",   // $11
+            "VERA_L0_VSCR_L",   // $12
+            "VERA_L0_VSCR_H",   // $13
+        };
+        return l0[offset - 0x0D];
     }
 
     if (offset >= 0x14 && offset <= 0x1A)
