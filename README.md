@@ -44,6 +44,7 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 - Implementazione di periferiche PBI per Atari
 - Analisi del traffico del bus dati/indirizzi
 - Espansioni RAM a banchi nell'area I/O ($D1xx / $D5xx), stile GeoRAM
+- GeoRAM 256 KB per Commodore 64 sulla porta di espansione (ambiente `c64`)
 - Sviluppo di cartucce intelligenti
 
 ## ✨ Caratteristiche Principali
@@ -235,6 +236,59 @@ $D1FF è il registro PBI dell'Atari (l'OS lo legge a ogni IRQ, gli altri disposi
 
 I banchi da 256 byte vengono allocati all'avvio dall'heap DRAM libero dell'ESP32 (meno 24 KB di riserva per il sistema); una sola RAM e un solo registro del banco per le due modalità.  Indirizzo lineare: banco = indirizzo >> 8, offset = indirizzo & $FF.  All'accensione: non selezionato, banco 0, RAM a `$00`; il dispositivo non vede il RESET dell'Atari e mantiene lo stato, la RAM non si conserva al reset dell'ESP32.  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF / $D5FF.
 
+#### 3. Commodore 64: GeoRAM 256 KB (ambiente `c64`)
+
+La stessa scheda, con l'ambiente `c64` (`-D BUS_C64=1`), diventa una GeoRAM compatibile per la porta di espansione del C64, con lo stesso schema del firmware di Vera-Module-RBL-C64:
+
+| Indirizzo | Funzione | Note |
+|-----------|----------|------|
+| **$DE00–$DEFF** (/IO1) | Finestra di 256 byte sulla RAM | Lettura e scrittura |
+| **$DFFE** (/IO2) | Pagina nel blocco (0–63) | Solo scrittura, in lettura non pilotato |
+| **$DFFF** (/IO2) | Blocco da 16 KB (0–15) | Solo scrittura, in lettura non pilotato |
+
+- **Sempre attiva**, senza latch, come la cartuccia originale; il resto di IO2 non è decodificato (nessun mirror in $DF80–$DFFD)
+- **256 KB, 16 blocchi**: indirizzo = blocco × 16384 + pagina × 256 + offset; il blocco è limitato alla dimensione (il blocco 16 coincide con lo 0) come su una GeoRAM vera, così la rilevazione della dimensione vede una 256 KB.  `-D GEORAM_KB=...` per un'altra potenza di 2
+- **Memoria**: circa 210 KB dalla DRAM dell'ESP32 e il resto dall'IRAM libera, letta e scritta solo a 32 bit; se non basta, il firmware scende a 128 KB e lo dice nel banner.  La geoRAM originale era da 512 KB: il software che pretende quel taglio non funziona
+- **Ciclo di bus**: il VIC-II possiede il bus durante PHI1, quindi tutto avviene con PHI2 alto: dopo la salita il firmware attende /IO1 o /IO2 per al massimo 200 ns (`IO_QUALIFY_NS`), legge A0–A7 e, in lettura, pilota subito il byte fino alla discesa di PHI2; in scrittura il dato è campionato 300 ns dopo la salita (`BUS_WR_SAMPLE_NS`)
+- **Stato**: azzerato all'accensione, mantenuto al reset del C64; la RAM non si conserva al reset dell'ESP32
+
+Collegamento alla porta di espansione (pin del C64 dal pinout standard: verificarli sullo schema prima di saldare):
+
+| Segnale | Porta C64 | J3 |
+|---------|-----------|----|
+| **/IO1** | 7 | 12 (GPIO23, ingresso `~CCTL`) |
+| **/IO2** | 10 | 11 (GPIO22, ingresso `~D1XX`) |
+| D0 / D1 / D2 / D3 | 21 / 20 / 19 / 18 | 2 / 3 / 5 / 6 |
+| D4 / D5 / D6 / D7 | 17 / 16 / 15 / 14 | 22 / 23 / 8 / 9 |
+| A0 / A1 / A2 / A3 | Y / X / W / V | 18 / 19 / 20 / 21 |
+| A4 / A5 / A6 / A7 | U / T / S / R | 16 / 17 / 10 / 15 |
+| Φ2 | E | 1 |
+| R/W | 5 | 7 |
+| GND | 1, 22, A, Z | 29, 30 |
+| +5V | 2, 3 | 31, 32 |
+
+Output seriale (i numeri di pagine e di memoria libera dipendono dalla scheda):
+
+```
+[6502_monitor] GeoRAM on the C64 expansion port: 256 KB = 16 blocks x 16 KB
+[6502_monitor] Pages: <d> in DRAM, <i> in IRAM, <b> heap blocks; left <h> bytes DRAM, <r> bytes IRAM
+[6502_monitor] IO1 $DE00-$DEFF RAM, IO2 $DFFE page, $DFFF block (write-only)
+[6502_monitor] /IO1 on J3 pin 12 (GPIO23), /IO2 on J3 pin 11 (GPIO22)
+[6502_monitor] Bus loop on Core 1 (/IOx within 200 ns, write sample 300 ns after PHI2 rises), log 115200 baud
+[    2.000000] [DFFF - GEORAM_BLOCK        ] W $04  SEL
+[    2.000010] [DFFE - GEORAM_PAGE         ] W $23  SEL
+[    2.000020] [DE45 - RAM blk $04 pg $23 +$45] R $12  SEL DRV
+```
+
+Uso dal C64:
+```
+LDA #$04 : STA $DFFF   ; blocco 4
+LDA #$23 : STA $DFFE   ; pagina 35
+LDA $DE45              ; byte GeoRAM $12345
+```
+
+Da verificare sull'hardware: il banner (256 KB effettivi), le temporizzazioni all'oscilloscopio e la compatibilità con GEOS e il software GeoRAM.
+
 ## 🚀 Installazione e Setup
 
 ### Requisiti Hardware
@@ -271,13 +325,18 @@ framework = arduino
 monitor_speed = 115200
 upload_speed = 921600
 board_build.f_cpu = 240000000
+
+[env:c64]                      ; Commodore 64, GeoRAM
+extends = env:nodemcu-32s
+build_flags = ${env:nodemcu-32s.build_flags} -D BUS_C64=1
 ```
 
-Il modulo si programma **sempre scollegato dall'Atari**, collegato solo al PC.  Prima di ogni upload `efuse_vdd_sdio.py` verifica gli efuse VDD_SDIO e, se sono vergini, li programma a 3,3 V (**irreversibile**), così GPIO12 non viene più letto al reset.
+Il modulo si programma **sempre scollegato dall'Atari o dal C64**, collegato solo al PC.  Prima di ogni upload `efuse_vdd_sdio.py` verifica gli efuse VDD_SDIO e, se sono vergini, li programma a 3,3 V (**irreversibile**), così GPIO12 non viene più letto al reset.
 
 3. **Compilazione e upload**:
 ```bash
-pio run --target upload
+pio run -e nodemcu-32s --target upload   # Atari
+pio run -e c64 --target upload           # Commodore 64 (GeoRAM)
 pio device monitor
 ```
 
@@ -437,7 +496,7 @@ gantt
 ESP32-BOBOARD-5V/
 ├── 📁 firmware/
 │   └── 📁 6502_monitor/
-│       ├── 📄 platformio.ini          # Configurazione PlatformIO (un solo ambiente: nodemcu-32s)
+│       ├── 📄 platformio.ini          # Configurazione PlatformIO (ambienti nodemcu-32s / Atari e c64 / C64)
 │       ├── 📄 efuse_vdd_sdio.py       # Controllo/programmazione efuse VDD_SDIO prima di ogni upload
 │       ├── 📁 src/
 │       │   └── 📄 main.cpp            # Firmware ESP32 (RAM a banchi PBI/CCTL + monitor)

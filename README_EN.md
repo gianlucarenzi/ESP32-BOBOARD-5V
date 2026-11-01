@@ -44,6 +44,7 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - PBI peripheral implementation for Atari
 - Data/address bus traffic analysis
 - Banked RAM expansions in the I/O area ($D1xx / $D5xx), GeoRAM style
+- 256 KB GeoRAM for the Commodore 64 expansion port (`c64` env)
 - Smart cartridge development
 
 ## ✨ Key Features
@@ -235,6 +236,59 @@ $D1FF is the PBI register of the Atari (the OS reads it on every IRQ, other PBI 
 
 The 256-byte banks are allocated at boot from the free ESP32 DRAM heap (minus 24 KB kept for the system); one RAM and one bank register for both modes.  Linear address: bank = address >> 8, offset = address & $FF.  Power-up: deselected, bank 0, RAM `$00`; the device does not see the Atari RESET and keeps its state, the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF / $D5FF.
 
+#### 3. Commodore 64: 256 KB GeoRAM (`c64` env)
+
+The same board, built with the `c64` env (`-D BUS_C64=1`), becomes a GeoRAM-compatible expansion for the C64 expansion port, with the same scheme as the Vera-Module-RBL-C64 firmware:
+
+| Address | Function | Notes |
+|---------|----------|-------|
+| **$DE00–$DEFF** (/IO1) | 256-byte window on the RAM | Read and write |
+| **$DFFE** (/IO2) | Page within the block (0–63) | Write-only, not driven on reads |
+| **$DFFF** (/IO2) | 16 KB block (0–15) | Write-only, not driven on reads |
+
+- **Always enabled**, no latch, like the original cartridge; the rest of IO2 is not decoded (no mirrors in $DF80–$DFFD)
+- **256 KB, 16 blocks**: address = block × 16384 + page × 256 + offset; the block is masked to the size (block 16 aliases block 0) as on a real GeoRAM, so size detection sees a 256 KB unit.  `-D GEORAM_KB=...` for another power of two
+- **Memory**: about 210 KB from the ESP32 DRAM and the rest from the free IRAM, read and written with 32-bit accesses only; if it is not enough the firmware drops to 128 KB and says so in the banner.  The original geoRAM was 512 KB: software that requires that size will not work
+- **Bus cycle**: the VIC-II owns the bus during PHI1, so everything happens with PHI2 high: after the rise the firmware waits at most 200 ns for /IO1 or /IO2 (`IO_QUALIFY_NS`), samples A0–A7 and, on a read, drives the byte at once until PHI2 falls; write data is sampled 300 ns after the rise (`BUS_WR_SAMPLE_NS`)
+- **State**: zeroed at power-up, kept across a C64 reset; the RAM is not kept across an ESP32 reset
+
+Wiring to the expansion port (C64 pins from the standard pinout: check them against the schematic before soldering):
+
+| Signal | C64 port | J3 |
+|--------|----------|----|
+| **/IO1** | 7 | 12 (GPIO23, `~CCTL` input) |
+| **/IO2** | 10 | 11 (GPIO22, `~D1XX` input) |
+| D0 / D1 / D2 / D3 | 21 / 20 / 19 / 18 | 2 / 3 / 5 / 6 |
+| D4 / D5 / D6 / D7 | 17 / 16 / 15 / 14 | 22 / 23 / 8 / 9 |
+| A0 / A1 / A2 / A3 | Y / X / W / V | 18 / 19 / 20 / 21 |
+| A4 / A5 / A6 / A7 | U / T / S / R | 16 / 17 / 10 / 15 |
+| Φ2 | E | 1 |
+| R/W | 5 | 7 |
+| GND | 1, 22, A, Z | 29, 30 |
+| +5V | 2, 3 | 31, 32 |
+
+Serial output (page counts and free memory depend on the board):
+
+```
+[6502_monitor] GeoRAM on the C64 expansion port: 256 KB = 16 blocks x 16 KB
+[6502_monitor] Pages: <d> in DRAM, <i> in IRAM, <b> heap blocks; left <h> bytes DRAM, <r> bytes IRAM
+[6502_monitor] IO1 $DE00-$DEFF RAM, IO2 $DFFE page, $DFFF block (write-only)
+[6502_monitor] /IO1 on J3 pin 12 (GPIO23), /IO2 on J3 pin 11 (GPIO22)
+[6502_monitor] Bus loop on Core 1 (/IOx within 200 ns, write sample 300 ns after PHI2 rises), log 115200 baud
+[    2.000000] [DFFF - GEORAM_BLOCK        ] W $04  SEL
+[    2.000010] [DFFE - GEORAM_PAGE         ] W $23  SEL
+[    2.000020] [DE45 - RAM blk $04 pg $23 +$45] R $12  SEL DRV
+```
+
+Use from the C64:
+```
+LDA #$04 : STA $DFFF   ; block 4
+LDA #$23 : STA $DFFE   ; page 35
+LDA $DE45              ; GeoRAM byte $12345
+```
+
+To be verified on the hardware: the banner (actual 256 KB), the timing with a scope and the compatibility with GEOS and GeoRAM software.
+
 ## 🚀 Installation and Setup
 
 ### Hardware Requirements
@@ -271,13 +325,18 @@ framework = arduino
 monitor_speed = 115200
 upload_speed = 921600
 board_build.f_cpu = 240000000
+
+[env:c64]                      ; Commodore 64, GeoRAM
+extends = env:nodemcu-32s
+build_flags = ${env:nodemcu-32s.build_flags} -D BUS_C64=1
 ```
 
-The module is **always programmed disconnected from the Atari**, connected only to the PC.  Before every upload `efuse_vdd_sdio.py` checks the VDD_SDIO efuses and, if they are blank, burns them to 3.3 V (**irreversible**), so GPIO12 is no longer sampled at reset.
+The module is **always programmed disconnected from the Atari or the C64**, connected only to the PC.  Before every upload `efuse_vdd_sdio.py` checks the VDD_SDIO efuses and, if they are blank, burns them to 3.3 V (**irreversible**), so GPIO12 is no longer sampled at reset.
 
 3. **Compilation and upload**:
 ```bash
-pio run --target upload
+pio run -e nodemcu-32s --target upload   # Atari
+pio run -e c64 --target upload           # Commodore 64 (GeoRAM)
 pio device monitor
 ```
 
@@ -437,7 +496,7 @@ gantt
 ESP32-BOBOARD-5V/
 ├── 📁 firmware/
 │   └── 📁 6502_monitor/
-│       ├── 📄 platformio.ini          # PlatformIO configuration (one environment: nodemcu-32s)
+│       ├── 📄 platformio.ini          # PlatformIO configuration (envs nodemcu-32s / Atari and c64 / C64)
 │       ├── 📄 efuse_vdd_sdio.py       # VDD_SDIO efuse check/burn before every upload
 │       ├── 📁 src/
 │       │   └── 📄 main.cpp            # ESP32 firmware (PBI/CCTL banked RAM + monitor)
