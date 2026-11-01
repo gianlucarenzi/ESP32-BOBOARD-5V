@@ -465,30 +465,9 @@ sequenceDiagram
 
 ### Diagramma Temporale Bus 6502
 
-```mermaid
-gantt
-    title Ciclo di bus Atari, firmware nodemcu-32s (ns, NTSC 559 ns)
-    dateFormat x
-    axisFormat %L
-    tickInterval 50millisecond
+Ciclo di bus Atari visto dal firmware `nodemcu-32s` (ns dalla discesa di PHI2; generato da [`docs/timing.py`](firmware/6502_monitor/docs/timing.py)):
 
-    section PHI2
-    Basso (PHI1)                    :p1, 0, 280
-    Alto (PHI2)                     :active, p2, 280, 559
-
-    section 6502 / MMU
-    A0-A7, R/W validi (t_ADS)       :a1, 140, 559
-    ~D1XX / ~CCTL validi            :a2, 170, 559
-
-    section ESP32
-    Campione indirizzo e selezioni  :crit, e1, 200, 215
-    Decodifica, byte in GPIO.out    :e2, 215, 320
-    Lettura - D0-D7 pilotati        :active, e3, 360, 559
-    Scrittura - campione del dato   :crit, e4, 400, 410
-
-    section 6502 legge
-    Dato stabile (t_DSU 100 ns)     :d1, 459, 559
-```
+![Diagramma temporale](firmware/6502_monitor/docs/timing_atari.svg)
 
 ### Performance del Monitor
 
