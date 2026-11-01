@@ -2,6 +2,16 @@
 
 ## 2026-11-01: Bus Loop Optimizations from RBL-XE, PBI Latch Rule, Serial Log
 
+### ROM-less PBI / CCTL Peripheral (supersedes the ROM and MPD / EXTSEL parts below)
+On this board MPD (GPIO0) and EXTSEL (GPIO3) never reached the Atari: GPIO0 is not on the 30-pin DevKit headers, GPIO3 only goes to J4 and the USB bridge TX.  Only one TXS0108E channel is free (U4 channel 8), and without MPD the PBI ROM at $D800 would collide with the internal Math Pack.  Decision: drop the ROM, keep the device in the I/O windows only.
+- **Signals**: D0-D7, A0-A7, PHI2, R/W, `~D1XX` (GPIO22) and `~CCTL` (GPIO23, the former ROMSEL channel) = 20 inputs, no output pins.  `~D1XX` / `~CCTL` come from the Atari MMU / PLA decode; `~D1XX` is not PHI2-qualified.  Freed: GPIO12 (A8, still wired), GPIO25 (A9), GPIO26 (A10).
+- **Device**: two windows, $D100-$D1FF and $D500-$D5FF, each with its own select latch at $D1FF / $D5FF (bit 7 = device ID $80: each device latches only its own bit) and its own 256-byte register file, written only by the Atari (power-up $00).  Selected: writes to $xx00-$xxFE are stored, reads are answered with the stored byte.  Not selected: never drives the bus.  $D1FF / $D5FF are never driven on reads ($D1FF is the PBI interrupt status).  The OS PBI scan finds no ROM signature and skips the device; programs select it by writing $80 to $D1FF.
+- **Bus loop**: decode during PHI1, as on RBL-XE: A0-A7, R/W and the selects are sampled `BUS_ADDR_SETTLE_NS` (200 ns) after PHI2 falls, the byte is written to `GPIO.out` with the outputs still off, and the PHI2 rising edge only needs `GPIO.enable_w1ts` (`beqz` + `s32i` after the sample that sees the edge).  A select seen only on the rising edge (PHI2-qualified decode, e.g. if `~CCTL` turns out to be) is taken from that sample and driven late.  Writes sampled `BUS_WR_SAMPLE_NS` after PHI2 rises; the settle time counts from the earlier of the detected and the predicted PHI2 falling edge (`BUS_PHI2_HIGH_MAX_NS`).  The log event of a cycle is pushed during the next PHI1.
+- **Log**: every access to both windows, selected or not, tagged `SEL` / `SEL DRV` / `-`; latch changes as `PBI_SELECT` / `CCTL_SELECT`.  VERA register names kept for offsets $00-$1A, DCSEL tracked per window.
+- **Removed**: `6502/` (ROM sources, Makefile, linker script, font), `pre_build.py`, `include/pbi-driver.h`, the cc65 dependency, `BUS_MODE` and the `nodemcu-32s-cctl` environment: one firmware serves both windows.
+- **Bootstrap**: unchanged and simpler: no output pins at start-up, D0-D7 driven only by the bus loop.  GPIO12 is unused but still wired to U1 / J3 pin 4, so the VDD_SDIO efuse check stays.
+- **To measure on hardware**: how long before PHI2 falls D0-D7 are stable on reads (6502 setup ~100 ns), and whether 200 ns of settle cover t_ADS + MMU / PLA + TXS0108E delays.
+
 ### Bus Loop Optimizations Ported from Vera-Module-RBL-XE
 Commit `a1e09b9` ports the RBL-XE (ESP32-S3) bus loop optimizations, adapted to the ESP32 classic (Xtensa LX6: no dedicated GPIO, no `ee.*` instructions, scattered bus pins):
 - **Core 1 belongs to the bus loop**: interrupts masked (`portDISABLE_INTERRUPTS()`), interrupt watchdog MWDT1 disabled (it checks CPU1 too and would reset the chip after 300 ms), no FreeRTOS call inside the loop.

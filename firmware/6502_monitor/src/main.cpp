@@ -1,30 +1,42 @@
 /**
- * 6502_monitor -- ESP32 PBI ROM Emulator ($D800-$DFFF)
+ * 6502_monitor -- ROM-less Atari PBI / CCTL peripheral and bus monitor
  *
  * FIRMWARE: Targets NodeMCU DevKit V1 (ESP32-WROOM, Xtensa LX6).
  *
  * BEHAVIOUR:
- * - ROMSEL ($D800-$DFFF): only when the latch is active (PBI rule: a device
- *   not selected through $D1FF must not answer), asserts MPD low and drives
- *   pbi_rom[A0-A10] on reads.
- *   Full 2 KB addressing via A0-A10 (no aliasing).
- * - EXTSEL ($D1XX): asserted low when the internal latch is active.
- * - Latch (PBI mode):  set by writing $80 to $D1FF, cleared by any other value.
- * - Latch (CCTL mode): same mechanism, latch address is $D5FF instead of $D1FF;
- *   ROMSEL / MPD / EXTSEL follow the latch exactly as in PBI mode.
+ * - Two register windows, decoded by the Atari MMU / PLA:
+ *     ~D1XX  $D100-$D1FF  (PBI device area)
+ *     ~CCTL  $D500-$D5FF  (cartridge control area)
+ *   Only A0-A7 are sampled: the page comes from the select line.
+ * - Each window has its own select latch and its own 256-byte register file:
+ *     $D1FF / $D5FF write: bit 7 (PBI device ID $80) selects (1) or
+ *     deselects (0) the device in that window.
+ *     $xx00-$xxFE write while selected: stored in the register file.
+ *     $xx00-$xxFE read  while selected: the device drives the stored byte.
+ *   The latch address itself is never driven on reads ($D1FF is the PBI
+ *   interrupt status, read by the OS).  Not selected: the device never drives
+ *   the bus, as every PBI device.
+ * - The registers are written only by the Atari (power-up value $00).
+ * - No ROM: the OS PBI scan does not find a signature at $D803 / $D80B and
+ *   skips the device; programs select it directly through $D1FF.
+ * - No MPD / EXTSEL: no ROM at $D800, no RAM to replace in the I/O area.
  * - LOG: lock-free ring from the Core 1 bus loop to LogTask on Core 0; prints
- *   VCS latch changes and every $D100-$D1FE read/write access.
+ *   latch changes and every access to both windows, selected or not.
  *
- * Bus loop optimizations ported from Vera-Module-RBL-XE (ESP32-S3), adapted to
- * the ESP32 classic, which has no dedicated GPIO and no ee.* instructions:
+ * Bus loop (optimizations ported from Vera-Module-RBL-XE, adapted to the
+ * ESP32 classic: no dedicated GPIO, no ee.* instructions):
  * - Core 1 belongs to the bus loop: interrupts masked, interrupt watchdog off,
  *   no FreeRTOS call; Serial and the log printer run on Core 0.
- * - Hot-loop data in DRAM (IRAM is not byte-addressable on the ESP32).
- * - Table-driven address decode and precomputed GPIO.out words for the ROM.
- * - One GPIO.out store per cycle for D0-D7, MPD and EXTSEL; GPIO accesses in
- *   inline assembly, without the memw the compiler puts around volatiles.
- * - Write data sampled at a fixed time after PHI2 rises (CCOUNT), read data
- *   of the VERA registers sampled just before PHI2 falls.
+ * - The address is decoded during PHI1: ~D1XX is not PHI2-qualified, so A0-A7,
+ *   R/W, ~D1XX and ~CCTL are sampled BUS_ADDR_SETTLE_NS after PHI2 falls and
+ *   the read byte is already in GPIO.out (outputs still off) when PHI2 rises:
+ *   on the rising edge one store turns D0-D7 on.  If a select line shows up
+ *   only on the rising edge (a PHI2-qualified decode), the byte is driven
+ *   late from that sample.
+ * - Hot-loop data in DRAM (IRAM is not byte-addressable on the ESP32); GPIO
+ *   accesses in inline assembly, without the memw the compiler puts around
+ *   volatiles.
+ * - Write data sampled at a fixed time after PHI2 rises (CCOUNT).
  */
 
 #include <Arduino.h>
@@ -40,22 +52,11 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "pbi-driver.h"
-
-// ---------------------------------------------------------------------------
-// Bus Protocol Mode
-// ---------------------------------------------------------------------------
-#define BUS_MODE_PBI  0  // Parallel Bus Interface (Atari XL/XE)
-#define BUS_MODE_CCTL 1  // Cartridge Control (Cartridge Slot)
-
-#ifndef BUS_MODE
-#define BUS_MODE BUS_MODE_PBI
-#endif
 
 // ---------------------------------------------------------------------------
 // Pin Definitions (NodeMCU DevKit V1 / ESP32-WROOM)
 // ---------------------------------------------------------------------------
-// Data Bus (D0-D7)
+// Data Bus (D0-D7), bidirectional
 #define PIN_D0 4
 #define PIN_D1 5
 #define PIN_D2 13
@@ -64,31 +65,32 @@
 #define PIN_D5 17
 #define PIN_D6 18
 #define PIN_D7 19
-// Address Bus (A6-A10)
-#define PIN_A6  21
-#define PIN_A7  27
-#define PIN_A8  12  // formerly RESET
-#define PIN_A9  25  // formerly VCS
-#define PIN_A10 26  // formerly RAMSEL
-// PBI / Control
-#define PIN_SEL_N  22  // $D1XX / CCTL selection (Active LOW, Input)
-#define PIN_ROMSEL 23  // $D800-$DFFF range select (Active LOW, Input)
-// Outputs
-#define PIN_EXTSEL 3   // Disable Atari internal memory (Active LOW, Output)
-#define PIN_MPD    0   // Math Pack Disable (Active LOW, Output)
-// Common Bus Signals
-#define PIN_PHI2   2   // 6502 Phase 2 Clock (1.79 MHz)
-#define PIN_RW     15  // Read/Write (High = Read, Low = Write)
-// Address Pins (A0-A5)
+// Address Bus (A0-A7)
 #define PIN_A0 34
 #define PIN_A1 35
 #define PIN_A2 36
 #define PIN_A3 39
 #define PIN_A4 32
 #define PIN_A5 33
+#define PIN_A6 21
+#define PIN_A7 27
+// Window selects from the Atari MMU / PLA (Active LOW)
+#define PIN_D1XX_N 22  // $D100-$D1FF
+#define PIN_CCTL_N 23  // $D500-$D5FF
+// Common Bus Signals
+#define PIN_PHI2   2   // 6502 Phase 2 Clock (1.79 MHz)
+#define PIN_RW     15  // Read/Write (High = Read, Low = Write)
 
-// UART0 TX for the log (RX unused: GPIO3 is EXTSEL)
+// UART0 TX for the log (RX unused)
 #define PIN_UART_TX 1
+
+/*
+ * Not used by the firmware, left as inputs:
+ *   GPIO 12 — still wired to U1 / J3 pin 4 (former A8).  Strapping pin
+ *             (MTDI): the VDD_SDIO efuses make the ESP32 ignore it.
+ *   GPIO 25, 26 — free TXS0108E channels (former A9, A10).
+ *   GPIO 0, 3 — not routed to J3 on this board.
+ */
 
 static const uint8_t DBUS_PINS[8] = {PIN_D0, PIN_D1, PIN_D2, PIN_D3,
                                      PIN_D4, PIN_D5, PIN_D6, PIN_D7};
@@ -98,33 +100,66 @@ static const uint8_t DBUS_PINS[8] = {PIN_D0, PIN_D1, PIN_D2, PIN_D3,
      (1UL << PIN_D4) | (1UL << PIN_D5) | (1UL << PIN_D6) | (1UL << PIN_D7))
 
 /*
- * GPIO.out is written as a whole once per bus cycle: D0-D7, MPD and EXTSEL
- * are the only GPIO outputs of Bank 0 (GPIO 0-31).  The other Bank 0 pins
- * are inputs, or GPIO1 = U0TXD, which the IO_MUX routes to the UART and
- * ignores GPIO.out.  A new GPIO output on Bank 0 must be added to the word.
+ * GPIO.out is written as a whole: D0-D7 are the only GPIO outputs of Bank 0
+ * (GPIO 0-31).  The other Bank 0 pins are inputs, or GPIO1 = U0TXD, which the
+ * IO_MUX routes to the UART and ignores GPIO.out.  A new GPIO output on Bank 0
+ * must be added to the word.
  */
-static_assert(PIN_MPD < 32 && PIN_EXTSEL < 32 && PIN_PHI2 < 32 && PIN_RW < 32 &&
-              PIN_SEL_N < 32 && PIN_ROMSEL < 32, "bus loop expects these pins in Bank 0");
-static_assert(PIN_MPD == 0 && PIN_EXTSEL == 3,
-              "the bus loop assembly builds MPD (bit 0) and EXTSEL (bit 3) with extui/slli");
+static_assert(PIN_PHI2 < 32 && PIN_RW < 32 && PIN_D1XX_N < 32 && PIN_CCTL_N < 32,
+              "bus loop expects these pins in Bank 0");
 static_assert(PIN_A0 >= 32 && PIN_A1 >= 32 && PIN_A2 >= 32 && PIN_A3 >= 32 &&
               PIN_A4 >= 32 && PIN_A5 >= 32, "A0-A5 are decoded from GPIO.in1");
+static_assert(PIN_A6 >= 21 && PIN_A6 <= 27 && PIN_A7 >= 21 && PIN_A7 <= 27,
+              "addr_lut_lo covers GPIO 21-27");
 
 // ---------------------------------------------------------------------------
 // Bus Timing
 //
-// The loop detects the PHI2 rising edge, samples address, R/W, SEL_N and
-// ROMSEL, drives MPD / EXTSEL and the ROM byte.  Write data is valid t_MDS
-// after PHI2 rises (typ. 80-100 ns, see HARDWARE.md): it is sampled
-// BUS_WR_SAMPLE_NS after the detected rising edge, not right after the
-// decode.  Tune with -D after measuring the real bus.
+// PHI1: the 6502 drives address and R/W t_ADS after PHI2 falls (~140 ns for
+// a 2 MHz part); the MMU / PLA then decodes ~D1XX / ~CCTL and the TXS0108E
+// adds its delay.  The loop samples BUS_ADDR_SETTLE_NS after it sees PHI2
+// fall.  Read data must be valid ~100 ns before PHI2 falls (HARDWARE.md); it
+// is on the bus a few cycles after the detected PHI2 rising edge.
+//
+// PHI2: write data is valid t_MDS after PHI2 rises (typ. 80-100 ns): sampled
+// BUS_WR_SAMPLE_NS after the detected rising edge.
+//
+// The settle time counts from the earlier of the detected PHI2 falling edge
+// and the predicted one, PHI2 rise + BUS_PHI2_HIGH_MAX_NS (longest PHI2 high
+// phase, NTSC 279 ns / PAL 282 ns plus duty-cycle error): work done in PHI2
+// high that ends after the real edge does not delay the next sample.
+//
+// Tune with -D after measuring the real bus.
 // ---------------------------------------------------------------------------
+#ifndef BUS_ADDR_SETTLE_NS
+#define BUS_ADDR_SETTLE_NS 200u
+#endif
 #ifndef BUS_WR_SAMPLE_NS
 #define BUS_WR_SAMPLE_NS 120u
+#endif
+#ifndef BUS_PHI2_HIGH_MAX_NS
+#define BUS_PHI2_HIGH_MAX_NS 292u
 #endif
 
 #define CPU_MHZ          (F_CPU / 1000000UL)
 #define NS_TO_CYCLES(ns) (((ns) * CPU_MHZ + 999u) / 1000u)
+
+// ---------------------------------------------------------------------------
+// Device
+// ---------------------------------------------------------------------------
+#define PBI_DEV_ID   0x80u  // PBI device ID bit, also the CCTL select bit
+#define LATCH_OFFSET 0xFFu  // $D1FF / $D5FF
+
+#define WIN_D1XX 0
+#define WIN_CCTL 1
+#define WINDOWS  2
+
+static const uint8_t WIN_PAGE[WINDOWS] = {0xD1, 0xD5};
+
+// Register files, written only by the Atari.
+static DRAM_ATTR uint8_t  regs[WINDOWS][256];
+// GPIO.out words (D0-D7) of regs[][], kept in step on every write.
+static DRAM_ATTR uint32_t regs_out[WINDOWS][256];
 
 // ---------------------------------------------------------------------------
 // Log Ring (Core 1 bus loop → Core 0 LogTask)
@@ -135,15 +170,21 @@ static_assert(PIN_A0 >= 32 && PIN_A1 >= 32 && PIN_A2 >= 32 && PIN_A3 >= 32 &&
 // ---------------------------------------------------------------------------
 #define LOG_RING_SIZE 1024u   // power of two
 
-#define EVT_LATCH 0   // VCS latch state change
-#define EVT_REG   1   // $D100-$D1FE register access
+#define EVT_LATCH 0   // select latch change ($D1FF / $D5FF write)
+#define EVT_REG   1   // register access
 
-// flags: bit 0 = 1→write / 0→read   bit 1 = latch state (EVT_LATCH only)   bit 2 = MPD asserted (LO)   bit 3 = EXTSEL asserted (LO)
+// flags: bit 0 = write   bit 1 = device selected (EVT_REG) / new latch state
+//        (EVT_LATCH)     bit 2 = byte driven by this device (reads)
+#define FL_WRITE  0x01u
+#define FL_SEL    0x02u
+#define FL_DRIVEN 0x04u
+
 typedef struct {
     uint32_t cyc_lo;  // timestamp: 64-bit Core 1 CCOUNT since the bus loop started
     uint32_t cyc_hi;
     uint8_t  type;
-    uint8_t  offset;  // register offset within $D1XX (0x00-0xFE)
+    uint8_t  win;     // WIN_D1XX / WIN_CCTL
+    uint8_t  offset;  // A0-A7
     uint8_t  data;
     uint8_t  flags;
 } LogEvt;
@@ -153,57 +194,43 @@ static DRAM_ATTR uint32_t log_head    = 0;  // written by the bus loop only
 static DRAM_ATTR uint32_t log_tail    = 0;  // written by LogTask only
 static DRAM_ATTR uint32_t log_dropped = 0;  // written by the bus loop only
 
-
 // ---------------------------------------------------------------------------
-// PBI ROM & Decode Tables
-//
-// Everything the bus loop reads lives in DRAM: on the ESP32 IRAM only
-// supports 32-bit accesses, an 8-bit load from it raises LoadStoreError.
-// ---------------------------------------------------------------------------
-// Full 2 KB ROM image — A0-A10 decoded, no aliasing.
-static DRAM_ATTR uint8_t pbi_rom[2048];
-
-// GPIO.out data bits (D0-D7) for each ROM byte, indexed by A0-A10.
-static DRAM_ATTR uint32_t rom_out[2048];
-
-// A0-A5 from GPIO.in1 bits 0-7 (GPIO 32-39).
-static DRAM_ATTR uint16_t addr_lut_hi[256];
-// A6, A7, A9, A10 from GPIO.in bits 21-27 (GPIO 21, 27, 25, 26).
-static DRAM_ATTR uint16_t addr_lut_lo[128];
-
-static_assert(PIN_A6 >= 21 && PIN_A6 <= 27 && PIN_A7 >= 21 && PIN_A7 <= 27 &&
-              PIN_A9 >= 21 && PIN_A9 <= 27 && PIN_A10 >= 21 && PIN_A10 <= 27 &&
-              PIN_A8 == 12, "addr_lut_lo covers GPIO 21-27, A8 is GPIO 12");
-
-// ---------------------------------------------------------------------------
-// Decoding Helpers
+// Decoding Tables & Helpers
 // ---------------------------------------------------------------------------
 #define BUS_INLINE static inline __attribute__((always_inline))
+
+// A0-A5 from GPIO.in1 bits 0-7 (GPIO 32-39).
+static DRAM_ATTR uint8_t addr_lut_hi[256];
+// A6, A7 from GPIO.in bits 21-27 (GPIO 21, 27); ~D1XX / ~CCTL ignored.
+static DRAM_ATTR uint8_t addr_lut_lo[128];
 
 // D0-D7 on GPIO 4,5 | 13,14 | 16-19.
 static_assert(PIN_D0 == 4 && PIN_D1 == 5 && PIN_D2 == 13 && PIN_D3 == 14 &&
               PIN_D4 == 16 && PIN_D5 == 17 && PIN_D6 == 18 && PIN_D7 == 19,
-              "decode_data() hard-codes the data bus pins");
+              "decode_data() / encode_data() hard-code the data bus pins");
 
 BUS_INLINE uint8_t decode_data(uint32_t lo)
 {
     return (uint8_t)(((lo >> 4) & 0x03u) | ((lo >> 11) & 0x0Cu) | ((lo >> 12) & 0xF0u));
 }
 
-// 11-bit address (A0-A10) for indexing pbi_rom[].
-BUS_INLINE uint32_t decode_addr(uint32_t lo, uint32_t hi)
+BUS_INLINE uint32_t encode_data(uint32_t d)
 {
-    return addr_lut_hi[hi & 0xFFu] | addr_lut_lo[(lo >> 21) & 0x7Fu] |
-           ((lo >> (PIN_A8 - 8)) & 0x100u);
+    return ((d & 0x03u) << 4) | ((d & 0x0Cu) << 11) | ((d & 0xF0u) << 12);
 }
 
-static uint16_t addr_bits(uint32_t word, const uint8_t *pins, const uint8_t *abits,
-                          int n, int base)
+BUS_INLINE uint32_t decode_addr(uint32_t lo, uint32_t hi)
 {
-    uint16_t a = 0;
+    return addr_lut_hi[hi & 0xFFu] | addr_lut_lo[(lo >> 21) & 0x7Fu];
+}
+
+static uint8_t addr_bits(uint32_t word, const uint8_t *pins, const uint8_t *abits,
+                         int n, int base)
+{
+    uint8_t a = 0;
     for (int i = 0; i < n; i++)
         if ((word >> (pins[i] - base)) & 1u)
-            a |= (uint16_t)(1u << abits[i]);
+            a |= (uint8_t)(1u << abits[i]);
     return a;
 }
 
@@ -211,22 +238,20 @@ static void build_tables(void)
 {
     static const uint8_t hi_pins[6]  = {PIN_A0, PIN_A1, PIN_A2, PIN_A3, PIN_A4, PIN_A5};
     static const uint8_t hi_abits[6] = {0, 1, 2, 3, 4, 5};
-    static const uint8_t lo_pins[4]  = {PIN_A6, PIN_A7, PIN_A9, PIN_A10};
-    static const uint8_t lo_abits[4] = {6, 7, 9, 10};
+    static const uint8_t lo_pins[2]  = {PIN_A6, PIN_A7};
+    static const uint8_t lo_abits[2] = {6, 7};
 
     for (uint32_t i = 0; i < 256; i++)
         addr_lut_hi[i] = addr_bits(i, hi_pins, hi_abits, 6, 32);
     for (uint32_t i = 0; i < 128; i++)
-        addr_lut_lo[i] = addr_bits(i, lo_pins, lo_abits, 4, 21);
+        addr_lut_lo[i] = addr_bits(i, lo_pins, lo_abits, 2, 21);
 
-    for (uint32_t a = 0; a < 2048; a++)
-    {
-        uint32_t m = 0;
-        for (int b = 0; b < 8; b++)
-            if ((pbi_rom[a] >> b) & 1u)
-                m |= (1UL << DBUS_PINS[b]);
-        rom_out[a] = m;
-    }
+    for (uint32_t w = 0; w < WINDOWS; w++)
+        for (uint32_t a = 0; a < 256; a++)
+        {
+            regs[w][a]     = 0x00;
+            regs_out[w][a] = encode_data(0x00);
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -268,8 +293,6 @@ BUS_INLINE void bus_release(void)
                  : "memory");
 }
 
-// PHI2 edge waits: one GPIO.in load and one bit branch per sample.
-// They return the sample that saw the edge.
 BUS_INLINE uint32_t wait_phi2_high(void)
 {
     uint32_t v;
@@ -288,9 +311,35 @@ BUS_INLINE uint32_t wait_phi2_low(void)
     return v;
 }
 
+/*
+ * Wait for PHI2 to rise and, if `drive` is not zero, turn D0-D7 on right
+ * after the sample that saw the edge (GPIO.out already holds the byte).
+ * Returns that sample.
+ */
+BUS_INLINE uint32_t wait_phi2_high_drive(uint32_t drive)
+{
+    uint32_t v;
+    asm volatile("1: l32i %[v], %[gpio], %[o_in]     \n\t"
+                 "   bbci %[v], %[b_phi2], 1b        \n\t"
+                 "   beqz %[drv], 2f                 \n\t"
+                 "   s32i %[dmask], %[gpio], %[o_en] \n\t"
+                 "2:                                 \n\t"
+                 : [v] "=&r"(v)
+                 : [gpio] "r"(&GPIO), [drv] "r"(drive), [dmask] "r"(DBUS_MASK),
+                   [o_in] "n"(GPIO_OFF(in)), [o_en] "n"(GPIO_OFF(enable_w1ts)),
+                   [b_phi2] "n"(PIN_PHI2)
+                 : "memory");
+    return v;
+}
+
+BUS_INLINE void wait_until(uint32_t t)
+{
+    while ((int32_t)(cpu_ll_get_cycle_count() - t) < 0)
+        ;
+}
+
 // Push a log event into the ring without blocking (drops if full).
-BUS_INLINE void log_send(uint32_t cyc_lo, uint32_t cyc_hi, uint8_t type,
-                         uint8_t offset, uint8_t data, uint8_t flags)
+BUS_INLINE void log_push(const LogEvt *src)
 {
     uint32_t h = log_head;
     if (h - __atomic_load_n(&log_tail, __ATOMIC_ACQUIRE) >= LOG_RING_SIZE)
@@ -298,13 +347,7 @@ BUS_INLINE void log_send(uint32_t cyc_lo, uint32_t cyc_hi, uint8_t type,
         log_dropped++;
         return;
     }
-    LogEvt *e = &log_ring[h & (LOG_RING_SIZE - 1u)];
-    e->cyc_lo = cyc_lo;
-    e->cyc_hi = cyc_hi;
-    e->type   = type;
-    e->offset = offset;
-    e->data   = data;
-    e->flags  = flags;
+    log_ring[h & (LOG_RING_SIZE - 1u)] = *src;
     __atomic_store_n(&log_head, h + 1u, __ATOMIC_RELEASE);
 }
 
@@ -333,151 +376,150 @@ static void bus_int_wdt_disable(void)
 // ============================================================================
 static void IRAM_ATTR MonitorTask(void *pvParameters)
 {
-    const uint32_t m_phi2   = (1UL << PIN_PHI2);
-    const uint32_t m_rw     = (1UL << PIN_RW);
-    const uint32_t m_sel    = (1UL << PIN_SEL_N);
-    const uint32_t m_romsel = (1UL << PIN_ROMSEL);
-    const uint32_t m_mpd    = (1UL << PIN_MPD);
-    const uint32_t m_extsel = (1UL << PIN_EXTSEL);
+    const uint32_t m_rw   = (1UL << PIN_RW);
+    const uint32_t m_d1xx = (1UL << PIN_D1XX_N);
+    const uint32_t m_cctl = (1UL << PIN_CCTL_N);
+    const uint32_t m_phi2 = (1UL << PIN_PHI2);
 
+    const uint32_t settle    = NS_TO_CYCLES(BUS_ADDR_SETTLE_NS);
     const uint32_t wr_sample = NS_TO_CYCLES(BUS_WR_SAMPLE_NS);
+    const uint32_t phi2_max  = NS_TO_CYCLES(BUS_PHI2_HIGH_MAX_NS);
 
-    bool     latch  = false;   // internal device-active latch
-    uint32_t cyc_hi = 0;       // CCOUNT wraps every 2^32 / 240 MHz = 17.9 s
+    uint8_t  selected[WINDOWS] = {0, 0};  // select latches
+    uint32_t cyc_hi = 0;                  // CCOUNT wraps every 2^32 / 240 MHz = 17.9 s
     uint32_t t_prev = cpu_ll_get_cycle_count();
 
-    // Initial state: outputs inactive (HIGH), data bus released.
+    LogEvt   pend;                        // event of the previous cycle
+    bool     pend_valid = false;
+
     bus_release();
-    gpio_out(m_mpd | m_extsel);
+    gpio_out(0);
 
     // From here on Core 1 belongs to the bus: no tick, no interrupts.
     bus_int_wdt_disable();
     portDISABLE_INTERRUPTS();
 
+    // Align to the end of a PHI2-high phase.
+    wait_phi2_high();
+    uint32_t t_fall_max = cpu_ll_get_cycle_count() + phi2_max;
+    wait_phi2_low();
+
     for (;;)
     {
-        /*
-         * 1-4. Critical path, in assembly so that every operand stays in a
-         * register and the constants are loaded before the wait:
-         *   1. sync on the PHI2 rising edge;
-         *   2. sample address and control lines (GPIO.in, GPIO.in1);
-         *   3. control outputs: with the latch set MPD = ROMSEL level and
-         *      EXTSEL = SEL_N level (asserted in their windows); with the
-         *      latch clear both stay HIGH (ctrl_or);
-         *   4. ROM read with the latch set: A0-A10 from the tables, D0-D7
-         *      from rom_out[], one GPIO.out store with the control bits,
-         *      then the outputs on.
-         */
-        uint32_t lo, hi, t_rise, out, t, a;
-        const uint32_t ctrl_or = latch ? 0u : (m_mpd | m_extsel);
-        asm volatile(
-            "1: l32i   %[lo], %[gpio], %[o_in]    \n\t"
-            "   bbci   %[lo], %[b_phi2], 1b       \n\t"
-            "   rsr.ccount %[tr]                  \n\t"
-            "   l32i   %[lo], %[gpio], %[o_in]    \n\t"   /* GPIO.in  */
-            "   l32i   %[hi], %[gpio], %[o_in1]   \n\t"   /* GPIO.in1 */
-            "   extui  %[out], %[lo], %[b_rom], 1 \n\t"   /* MPD level  -> bit 0 */
-            "   extui  %[t], %[lo], %[b_sel], 1   \n\t"
-            "   slli   %[t], %[t], %[b_ext]       \n\t"   /* EXTSEL level -> bit 3 */
-            "   or     %[out], %[out], %[t]       \n\t"
-            "   or     %[out], %[out], %[ctrl_or] \n\t"
-            "   bnez   %[ctrl_or], 2f            \n\t"   /* latch clear: no ROM */
-            "   bbsi   %[lo], %[b_rom], 2f        \n\t"   /* ROMSEL not active */
-            "   bbci   %[lo], %[b_rw], 2f         \n\t"   /* write cycle */
-            "   extui  %[t], %[hi], 0, 8          \n\t"   /* GPIO 32-39 */
-            "   addx2  %[t], %[t], %[luthi]       \n\t"
-            "   l16ui  %[a], %[t], 0              \n\t"   /* A0-A5 */
-            "   extui  %[t], %[lo], 21, 7         \n\t"   /* GPIO 21-27 */
-            "   addx2  %[t], %[t], %[lutlo]       \n\t"
-            "   l16ui  %[t], %[t], 0              \n\t"   /* A6, A7, A9, A10 */
-            "   or     %[a], %[a], %[t]           \n\t"
-            "   extui  %[t], %[lo], %[b_a8], 1    \n\t"
-            "   slli   %[t], %[t], 8              \n\t"   /* A8 */
-            "   or     %[a], %[a], %[t]           \n\t"
-            "   addx4  %[t], %[a], %[romout]      \n\t"
-            "   l32i   %[t], %[t], 0              \n\t"   /* rom_out[A0-A10] */
-            "   or     %[t], %[t], %[out]         \n\t"
-            "   s32i   %[t], %[gpio], %[o_out]    \n\t"   /* GPIO.out */
-            "   s32i   %[dmask], %[gpio], %[o_en] \n\t"   /* GPIO.enable_w1ts */
-            "   j      3f                         \n\t"
-            "2: s32i   %[out], %[gpio], %[o_out]  \n\t"   /* GPIO.out, controls only */
-            "3:                                   \n\t"
-            : [lo] "=&r"(lo), [hi] "=&r"(hi), [tr] "=&r"(t_rise),
-              [out] "=&r"(out), [t] "=&r"(t), [a] "=&r"(a)
-            : [gpio] "r"(&GPIO), [ctrl_or] "r"(ctrl_or),
-              [luthi] "r"(addr_lut_hi), [lutlo] "r"(addr_lut_lo),
-              [romout] "r"(rom_out), [dmask] "r"(DBUS_MASK),
-              [o_in] "n"(GPIO_OFF(in)), [o_in1] "n"(GPIO_OFF(in1)),
-              [o_out] "n"(GPIO_OFF(out)), [o_en] "n"(GPIO_OFF(enable_w1ts)),
-              [b_phi2] "n"(PIN_PHI2), [b_rw] "n"(PIN_RW), [b_rom] "n"(PIN_ROMSEL),
-              [b_sel] "n"(PIN_SEL_N), [b_ext] "n"(PIN_EXTSEL), [b_a8] "n"(PIN_A8)
-            : "memory");
+        // ---- PHI1: PHI2 has just fallen ------------------------------------
+        uint32_t t_fall = cpu_ll_get_cycle_count();
+        if ((int32_t)(t_fall - t_fall_max) > 0)
+            t_fall = t_fall_max;            // edge seen late: use the prediction
 
+        // 1. Close the previous cycle (releasing an idle bus is harmless).
+        bus_release();
+
+        // 2. Log of the previous cycle: short, it fits in the settle time.
+        if (pend_valid)
+        {
+            log_push(&pend);
+            pend_valid = false;
+        }
+
+        // 3. Address, R/W and window selects, once stable.
+        wait_until(t_fall + settle);
+        uint32_t lo  = gpio_in();
+        uint32_t hi  = gpio_in1();
+        uint32_t off = decode_addr(lo, hi);
+        bool     rd  = (lo & m_rw) != 0;
+        int      win = !(lo & m_d1xx) ? WIN_D1XX : (!(lo & m_cctl) ? WIN_CCTL : -1);
+
+        // 4. Read of a selected register: byte into GPIO.out now (outputs
+        //    off), outputs on at the PHI2 rising edge.
+        uint32_t drive = (win >= 0 && rd && selected[win] && off != LATCH_OFFSET);
+        if (drive)
+            gpio_out(regs_out[win][off]);
+
+        const uint32_t s_rise = wait_phi2_high_drive(drive);
+        const uint32_t t_rise = cpu_ll_get_cycle_count();
+        t_fall_max = t_rise + phi2_max;
         if (t_rise < t_prev)
             cyc_hi++;
         t_prev = t_rise;
 
-        const bool sel = !(lo & m_sel);
-        const bool rom = !(lo & m_romsel) && latch;   // ROM window answered
-        const bool rd  = (lo & m_rw) != 0;
-        (void)a;
-
-        if (!sel)
+        // 5. Select seen only on the rising edge (PHI2-qualified decode):
+        //    take it from that sample and drive late.
+        if (win < 0)
         {
-            // 5. PHI2 falling edge: release data bus
-            wait_phi2_low();
-            bus_release();
-            continue;
+            win = !(s_rise & m_d1xx) ? WIN_D1XX : (!(s_rise & m_cctl) ? WIN_CCTL : -1);
+            if (win < 0)
+            {
+                wait_phi2_low();            // not our windows
+                continue;
+            }
+            drive = (rd && selected[win] && off != LATCH_OFFSET);
+            if (drive)
+            {
+                gpio_out(regs_out[win][off]);
+                bus_drive_enable();
+            }
         }
 
-        const uint8_t offset = (uint8_t)decode_addr(lo, hi);
-        uint8_t fl = 0;
-        if (rom)              fl |= 0x04;  // MPD asserted
-        if (!(out & m_extsel)) fl |= 0x08;  // EXTSEL asserted
+        pend.cyc_lo = t_rise;
+        pend.cyc_hi = cyc_hi;
+        pend.win    = (uint8_t)win;
+        pend.offset = (uint8_t)off;
+        pend_valid  = true;
 
-        if (!rd)
+        if (rd)
         {
-            // Write: sample the data at a fixed time after PHI2 rises
-            // (valid from t_MDS to 30 ns after PHI2 falls).
-            const uint32_t t_wr = t_rise + wr_sample;
-            while ((int32_t)(cpu_ll_get_cycle_count() - t_wr) < 0)
-                ;
-            const uint8_t data = decode_data(gpio_in());
-
-            if (offset == 0xFF)
+            pend.type  = EVT_REG;
+            pend.flags = (selected[win] ? FL_SEL : 0u) | (drive ? FL_DRIVEN : 0u);
+            if (drive)
             {
-                // $D1FF (PBI) / $D5FF (CCTL): latch control
-                const bool prev = latch;
-                latch = (data == 0x80);
-                if (!latch)
-                    GPIO.out_w1ts = m_extsel;
-                // Log only when state changes
-                if (latch != prev)
+                pend.data = regs[win][off];
+                wait_phi2_low();
+            }
+            else
+            {
+                // Someone else (or nobody) drives the bus: keep the last
+                // sample taken while PHI2 is still high.
+                uint32_t last = s_rise, now;
+                while ((now = gpio_in()) & m_phi2)
+                    last = now;
+                pend.data = decode_data(last);
+            }
+        }
+        else
+        {
+            // 6. Write: sample the data at a fixed time after PHI2 rises
+            //    (valid from t_MDS to 30 ns after PHI2 falls).
+            wait_until(t_rise + wr_sample);
+            const uint8_t data = decode_data(gpio_in());
+            pend.data = data;
+
+            if (off == LATCH_OFFSET)
+            {
+                // $D1FF / $D5FF: each device latches only its own ID bit.
+                const uint8_t sel = (data & PBI_DEV_ID) ? 1u : 0u;
+                if (sel != selected[win])
                 {
-                    uint8_t lf = latch ? 0x02 : 0x00;
-                    if (rom)   lf |= 0x04;  // MPD asserted
-                    if (latch) lf |= 0x08;  // EXTSEL now asserted
-                    log_send(t_rise, cyc_hi, EVT_LATCH, 0xFF, data, lf);
+                    selected[win] = sel;
+                    pend.type  = EVT_LATCH;
+                    pend.flags = FL_WRITE | (sel ? FL_SEL : 0u);
+                }
+                else
+                {
+                    pend.type  = EVT_REG;
+                    pend.flags = FL_WRITE | (sel ? FL_SEL : 0u);
                 }
             }
             else
             {
-                // $D100-$D1FE (PBI) / $D500-$D5FE (CCTL): register write
-                log_send(t_rise, cyc_hi, EVT_REG, offset, data, fl | 0x01);
+                pend.type  = EVT_REG;
+                pend.flags = FL_WRITE | (selected[win] ? FL_SEL : 0u);
+                if (selected[win])
+                {
+                    regs[win][off]     = data;
+                    regs_out[win][off] = encode_data(data);
+                }
             }
             wait_phi2_low();
-            bus_release();
-        }
-        else
-        {
-            // Read: the VERA drives the bus; keep the last sample taken
-            // while PHI2 is still high.
-            uint32_t last = lo, now;
-            while ((now = gpio_in()) & m_phi2)
-                last = now;
-            bus_release();
-            if (offset != 0xFF)
-                log_send(t_rise, cyc_hi, EVT_REG, offset, decode_data(last), fl);
         }
     }
 }
@@ -601,9 +643,10 @@ static void log_line(const char *fmt, ...)
 
 static void log_drain(void)
 {
-    // Shadow of VERA_CTRL DCSEL bits [2:1]; updated on every write to $D105.
-    static uint8_t  dcsel        = 0;
-    static uint32_t dropped_seen = 0;
+    // Shadow of VERA_CTRL DCSEL bits [2:1] per window; updated on every
+    // write to offset $05.
+    static uint8_t  dcsel[WINDOWS] = {0, 0};
+    static uint32_t dropped_seen   = 0;
 
     uint32_t t = log_tail;
     while (t != __atomic_load_n(&log_head, __ATOMIC_ACQUIRE))
@@ -614,30 +657,32 @@ static void log_drain(void)
         const uint64_t ts_us = ((((uint64_t)evt.cyc_hi) << 32) | evt.cyc_lo) / CPU_MHZ;
         const uint32_t sec   = (uint32_t)(ts_us / 1000000ULL);
         const uint32_t us    = (uint32_t)(ts_us % 1000000ULL);
+        const uint8_t  w     = evt.win < WINDOWS ? evt.win : 0;
+        const uint8_t  page  = WIN_PAGE[w];
+
         if (evt.type == EVT_LATCH)
         {
-            bool enabled = (evt.flags & 0x02) != 0;
-            log_line("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to %s) MPD=%s EXTSEL=%s\n",
-                     (unsigned long)sec, (unsigned long)us,
-                     enabled ? "ENABLED " : "DISABLED", evt.data,
-                     (BUS_MODE == BUS_MODE_PBI) ? "$D1FF" : "$D5FF",
-                     (evt.flags & 0x04) ? "LO" : "HI",
-                     (evt.flags & 0x08) ? "LO" : "HI");
+            log_line("[%5lu.%06lu] [%02X%02X - %-20s] W $%02X  device %s\n",
+                     (unsigned long)sec, (unsigned long)us, page, evt.offset,
+                     (w == WIN_D1XX) ? "PBI_SELECT" : "CCTL_SELECT", evt.data,
+                     (evt.flags & FL_SEL) ? "SELECTED" : "DESELECTED");
         }
         else  // EVT_REG
         {
+            const bool wr = (evt.flags & FL_WRITE) != 0;
             // Track DCSEL so muxed registers ($09-$0C) resolve correctly.
-            if (evt.offset == 0x05 && (evt.flags & 0x01))
-                dcsel = (evt.data >> 1) & 0x07;
+            if (evt.offset == 0x05 && wr)
+                dcsel[w] = (evt.data >> 1) & 0x07;
 
-            log_line("[%5lu.%06lu] [D1%02X - %-20s] %c $%02X  MPD=%s EXTSEL=%s\n",
-                     (unsigned long)sec, (unsigned long)us,
-                     evt.offset,
-                     vera_reg_name(evt.offset, dcsel),
-                     (evt.flags & 0x01) ? 'W' : 'R',
-                     evt.data,
-                     (evt.flags & 0x04) ? "LO" : "HI",
-                     (evt.flags & 0x08) ? "LO" : "HI");
+            const char *name = (evt.offset == LATCH_OFFSET)
+                                   ? ((w == WIN_D1XX) ? "PBI_SELECT" : "CCTL_SELECT")
+                                   : vera_reg_name(evt.offset, dcsel[w]);
+            const char *tag  = !(evt.flags & FL_SEL)     ? "-"
+                               : (evt.flags & FL_DRIVEN) ? "SEL DRV"
+                                                         : "SEL";
+            log_line("[%5lu.%06lu] [%02X%02X - %-20s] %c $%02X  %s\n",
+                     (unsigned long)sec, (unsigned long)us, page, evt.offset,
+                     name, wr ? 'W' : 'R', evt.data, tag);
         }
     }
 
@@ -654,12 +699,12 @@ static void LogTask(void *arg)
 {
     Serial.begin(LOG_BAUD, SERIAL_8N1, -1, PIN_UART_TX);
 
-    log_line("\n[6502_monitor] PBI ROM Emulator (%s mode, latch %s)\n",
-             (BUS_MODE == BUS_MODE_PBI) ? "PBI" : "CCTL",
-             (BUS_MODE == BUS_MODE_PBI) ? "$D1FF" : "$D5FF");
-    log_line("[6502_monitor] Bus loop on Core 1 (write sample %u ns), log %u baud\n",
-             (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
-    log_line("[6502_monitor] VCS=OFF  Latch=DISABLED\n");
+    log_line("\n[6502_monitor] ROM-less PBI / CCTL peripheral, device ID $%02X\n",
+             (unsigned)PBI_DEV_ID);
+    log_line("[6502_monitor] Windows $D100-$D1FE (select $D1FF), $D500-$D5FE (select $D5FF)\n");
+    log_line("[6502_monitor] Bus loop on Core 1 (settle %u ns, write sample %u ns), "
+             "log %u baud\n",
+             (unsigned)BUS_ADDR_SETTLE_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
 
     bool fail_seen = false;
     for (;;)
@@ -680,39 +725,25 @@ static void LogTask(void *arg)
 // ============================================================================
 void setup()
 {
-    // Load PBI driver ROM image (generated from 6502/pbi-driver.bin via pre_build.py)
-    static_assert(sizeof(pbi_driver) >= sizeof(pbi_rom), "PBI ROM image must be 2 KB");
-    memcpy(pbi_rom, pbi_driver, sizeof(pbi_rom));
     build_tables();
 
-    // Control outputs: inactive (HIGH).  The level is written before the pin
-    // becomes an output: the GPIO.out bit is 0 after reset, so pinMode()
-    // first would drive MPD / EXTSEL LOW for a few microseconds.
-    // (gpio_set_level() writes GPIO.out even while the pin is an input.)
-    digitalWrite(PIN_MPD,    HIGH);
-    digitalWrite(PIN_EXTSEL, HIGH);
-    pinMode(PIN_MPD,    OUTPUT);
-    pinMode(PIN_EXTSEL, OUTPUT);
-
-    // Data bus: high-impedance inputs initially
+    // Every bus pin is an input; D0-D7 become outputs only while the device
+    // answers a read, under the control of the bus loop.  GPIO.out is 0 and
+    // no Bank 0 pin is an output, so nothing is driven at start-up.
     for (int i = 0; i < 8; i++) pinMode(DBUS_PINS[i], INPUT);
 
-    // Address and bus control inputs
     pinMode(PIN_PHI2,   INPUT);
     pinMode(PIN_RW,     INPUT);
-    pinMode(PIN_SEL_N,  INPUT);
-    pinMode(PIN_ROMSEL, INPUT);
-    pinMode(PIN_A0,  INPUT);
-    pinMode(PIN_A1,  INPUT);
-    pinMode(PIN_A2,  INPUT);
-    pinMode(PIN_A3,  INPUT);
-    pinMode(PIN_A4,  INPUT);
-    pinMode(PIN_A5,  INPUT);
-    pinMode(PIN_A6,  INPUT);
-    pinMode(PIN_A7,  INPUT);
-    pinMode(PIN_A8,  INPUT);
-    pinMode(PIN_A9,  INPUT);
-    pinMode(PIN_A10, INPUT);
+    pinMode(PIN_D1XX_N, INPUT);
+    pinMode(PIN_CCTL_N, INPUT);
+    pinMode(PIN_A0, INPUT);
+    pinMode(PIN_A1, INPUT);
+    pinMode(PIN_A2, INPUT);
+    pinMode(PIN_A3, INPUT);
+    pinMode(PIN_A4, INPUT);
+    pinMode(PIN_A5, INPUT);
+    pinMode(PIN_A6, INPUT);
+    pinMode(PIN_A7, INPUT);
 
     // Serial and the log printer live on Core 0: banner first, then the
     // bus events, all from the same task.
