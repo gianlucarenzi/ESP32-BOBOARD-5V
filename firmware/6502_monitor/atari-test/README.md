@@ -21,31 +21,41 @@ Set `TEST_CCTL = 0` in the source to test only `$D1xx`.
 
 | Test | What it checks |
 |---|---|
-| `BANK REG` | bank register `$xxFD` written and read back, `$00-$FF` |
+| `COUNT` | number of banks `$xxFB-$xxFC` (printed): not zero, read-only |
+| `BANK REG` | 16-bit bank register `$xxFD-$xxFE` written and read back: low byte `$00-$FF` with high byte `$00`, `$55`, `$AA`, `$FF` |
 | `PROTECT` | deselected with `$7F` (bit 7 = 0, other bits set), writes to RAM and bank register are ignored; reselected with `$81`, the old values are back |
-| `MARCH` | all 256 banks filled with `offset EOR bank EOR key` and verified, then the complement: stuck data bits, address aliasing, banks that alias each other |
+| `MARCH` | every bank filled and verified, then the complement: bytes 0-1 hold the bank number, the others `offset EOR bank lo EOR bank hi EOR key`.  Stuck data bits, address aliasing, banks that alias each other |
+| `LIMIT` | writes to bank = count (no RAM behind it) do not land in the first or the last bank |
 | `D1 KEEP` | after the `$D5xx` tests and a deselect, `$D1xx` still holds its last pattern: windows independent, RAM kept while deselected |
 
-Output on success:
+The number of banks comes from the ESP32 heap; run time grows with it, a
+few seconds per 64 KB.
+
+Output on success (the count depends on the board):
 
 ```
 BANKED RAM TEST
-WINDOW $xx00-$xx7F, BANK $xxFD
+RAM $xx00-$xx7F, COUNT $xxFB
+BANK $xxFD, SELECT $xxFF
 
+D1 COUNT    $012C OK
 D1 BANK REG OK
 D1 PROTECT  OK
 D1 MARCH    OK
+D1 LIMIT    OK
+D5 COUNT    $012C OK
 D5 BANK REG OK
 D5 PROTECT  OK
 D5 MARCH    OK
+D5 LIMIT    OK
 D1 KEEP     OK
 
 ALL TESTS PASSED
 ```
 
 On failure each test prints `FAIL $nnnnnn` (errors, 24 bit) and its first
-four errors as `ERR D1 B=bb O=oo E=ee G=gg` (window, bank, offset, expected,
-got); the total is printed at the end.
+four errors as `ERR D1 B=bbbb O=oo E=ee G=gg` (window, bank, offset,
+expected, got); the total is printed at the end.
 
 ## Host simulation
 
@@ -59,10 +69,13 @@ make sim        # must print ALL TESTS PASSED
 make simall     # every injected fault must end with ERRORS
 ```
 
-Faults: bank register ignored, latch ignored, D3 stuck at 1, A6 not decoded,
-windows sharing one RAM, banks aliased on 7 bits, writes accepted while
-deselected.  All of them are detected.  The simulation checks the test
+The model has 300 banks per window (`sim_banked_ram.py XEX none N` for N),
+so the high byte of the bank register is used.  Faults: bank register
+ignored, bank high byte ignored, latch ignored, D3 stuck at 1, A6 not
+decoded, windows sharing one RAM, writes accepted while deselected, banks
+beyond the count wrapping onto existing ones, bank count writable.  All of
+them are detected.  The simulation checks the test
 program, not the bus timing: that needs the real board.
 
-The ESP32 log shows every access; a full run is ~300k accesses to the windows, so most
+The ESP32 log shows every access; a full run is about 4.5 accesses to the windows per byte of banked RAM, so most
 log events are dropped (and counted) at 115200 baud.

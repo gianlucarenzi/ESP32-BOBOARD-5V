@@ -3,25 +3,34 @@
 ;
 ; Tests both windows of the ESP32-BOBOARD-5V banked RAM peripheral:
 ;   $xx00-$xx7F  RAM window (128 bytes of the current bank)
-;   $xxFD        bank register (R/W, 256 banks)
+;   $xxFB-$xxFC  number of banks of the window (R, 16 bit)
+;   $xxFD-$xxFE  bank register (R/W, 16 bit)
 ;   $xxFF        select latch (W, bit 7 = device ID $80)
-; with xx = $D1 (PBI, ~D1XX) and $D5 (CCTL, ~CCTL).
+; with xx = $D1 (PBI, ~D1XX) and $D5 (CCTL, ~CCTL).  The number of banks
+; depends on the ESP32 heap and is read from $xxFB-$xxFC.
 ;
 ; Per window:
-;   1. BANK REG  write / read back the bank register, values $00-$FF
-;   2. PROTECT   deselected (latch written with $7F: bit 7 = 0, other bits
+;   1. COUNT     number of banks (printed), not 0, read-only
+;   2. BANK REG  write / read back the 16-bit bank register: low byte
+;                $00-$FF with high byte $00, $55, $AA, $FF
+;   3. PROTECT   deselected (latch written with $7F: bit 7 = 0, other bits
 ;                set) the device must ignore RAM and bank register writes;
 ;                reselected with $81 (bit 7 = 1) the old values are back
-;   3. MARCH     fill all 256 banks with  offset EOR bank EOR key,  verify;
-;                then the complement, verify.  Catches stuck data bits,
-;                offset / address aliasing and banks that alias each other
+;   4. MARCH     fill every bank, verify; then the complement, verify.
+;                Bytes 0-1 of each bank hold the bank number, the others
+;                offset EOR bank lo EOR bank hi: stuck data bits, address
+;                aliasing and banks that alias each other
+;   5. LIMIT     writes to bank = count (beyond the RAM) must not land in
+;                the first or the last bank
 ; Then:
-;   4. KEEP      window $D1 again, after the $D5 tests and a deselect: its
+;   6. KEEP      window $D1 again, after the $D5 tests and a deselect: its
 ;                last pattern must still be there (windows independent,
 ;                RAM kept while deselected)
 ;
-; The first errors are printed as  ERR D1 B=bb O=oo E=ee G=gg  (bank,
-; offset, expected, got).  At the end both windows are deselected.
+; Errors are counted on 24 bits; the first four of each test are printed as
+;   ERR D1 B=bbbb O=oo E=ee G=gg   (window, bank, offset, expected, got).
+; At the end both windows are deselected.  Run time grows with the number
+; of banks: a few seconds per 64 KB.
 ;
 ; Do not run with a cartridge that uses CCTL ($D5xx) for bank switching
 ; (XEGS, AtariMax, SpartaDOS X, ...): set TEST_CCTL = 0 to skip $D5xx.
@@ -37,8 +46,11 @@
 TEST_CCTL  = 1                  ; 0 = test only the $D1xx window
 
 RAM_SIZE   = $80                ; RAM window $xx00-$xx7F
-BANK_REG   = $FD                ; bank register offset
-LATCH      = $FF                ; select latch offset
+COUNT_L    = $FB                ; number of banks
+COUNT_H    = $FC
+BANK_L     = $FD                ; bank register
+BANK_H     = $FE
+LATCH      = $FF                ; select latch
 DEV_ID     = $80                ; PBI device ID bit
 MAX_REPORT = 4                  ; detailed error lines per test
 
@@ -47,8 +59,9 @@ MAX_REPORT = 4                  ; detailed error lines per test
 
 ptr:      .res 2                ; window base: $D100 / $D500
 sptr:     .res 2                ; string pointer for print
-bank:     .res 1                ; current bank in the loops
-bk:       .res 1                ; bank EOR key (pattern of the current bank)
+bank:     .res 2                ; current bank
+count:    .res 2                ; banks of the window
+bk:       .res 1                ; bank lo EOR bank hi EOR key
 key:      .res 1                ; window key EOR pass inversion
 wkey:     .res 1                ; window key
 errs:     .res 3                ; total errors (24 bit)
@@ -58,6 +71,7 @@ expect:   .res 1
 got:      .res 1
 offs:     .res 1
 tmp:      .res 1
+hi:       .res 1                ; BANK REG: high byte under test
 
 ; ---------------------------------------------------------------------------
         .segment "CODE"
@@ -86,7 +100,7 @@ start:
         jsr     test_window
 .endif
 
-        ; 4. KEEP: $D1 window still holds its complemented pattern.
+        ; 6. KEEP: $D1 window still holds its complemented pattern.
         PRINT   s_keep
         jsr     test_begin
         lda     #$D1
@@ -95,10 +109,15 @@ start:
         sta     ptr
         sta     wkey
         jsr     select
+        jsr     read_count
         lda     #$FF
         eor     wkey
         sta     key
+        lda     count
+        ora     count+1
+        beq     @keep_done
         jsr     verify_all
+@keep_done:
         jsr     deselect
         jsr     test_end
 
@@ -138,40 +157,115 @@ test_window:
         lda     #0
         sta     ptr
         stx     wkey
+        jsr     select
 
-        ; 1. BANK REG
+        ; 1. COUNT
+        jsr     print_win
+        PRINT   s_count
+        jsr     test_begin
+        jsr     read_count
+        lda     count+1
+        jsr     phex
+        lda     count
+        jsr     phex
+        lda     #' '
+        jsr     putc
+        lda     #0
+        sta     bank
+        sta     bank+1
+        lda     count
+        ora     count+1
+        bne     @cnt_nz
+        sta     expect                  ; no banks: A = 0
+        sta     got
+        lda     #COUNT_L
+        sta     offs
+        jsr     report
+@cnt_nz:
+        lda     count                   ; read-only: writes ignored
+        eor     #$FF
+        ldy     #COUNT_L
+        sta     (ptr),y
+        lda     count+1
+        eor     #$FF
+        ldy     #COUNT_H
+        sta     (ptr),y
+        ldy     #COUNT_L
+        lda     (ptr),y
+        cmp     count
+        bne     @cnt_err_l
+        ldy     #COUNT_H
+        lda     (ptr),y
+        cmp     count+1
+        beq     @cnt_ro
+        ldx     count+1
+        jmp     @cnt_err
+@cnt_err_l:
+        ldx     count
+@cnt_err:
+        sta     got
+        stx     expect
+        sty     offs
+        jsr     report
+@cnt_ro:
+        jsr     test_end
+        lda     count
+        ora     count+1
+        bne     @bankreg
+        jmp     @done                   ; nothing else to test
+
+        ; 2. BANK REG: lo $00-$FF with hi $00, $55, $AA, $FF.
+@bankreg:
         jsr     print_win
         PRINT   s_bankreg
         jsr     test_begin
-        jsr     select
+        ldx     #3
+@br_hi:
+        lda     hi_values,x
+        sta     hi
         lda     #0
         sta     bank
-@br_loop:
-        lda     bank
-        ldy     #BANK_REG
-        sta     (ptr),y
+@br_lo:
+        lda     hi
+        sta     bank+1
+        jsr     write_bank
+        ldy     #BANK_L
         lda     (ptr),y
         cmp     bank
+        bne     @br_err_l
+        ldy     #BANK_H
+        lda     (ptr),y
+        cmp     bank+1
         beq     @br_ok
         sta     got
+        lda     bank+1
+        jmp     @br_rep
+@br_err_l:
+        sta     got
         lda     bank
+@br_rep:
         sta     expect
-        lda     #BANK_REG
-        sta     offs
+        sty     offs
+        txa
+        pha
         jsr     report
+        pla
+        tax
 @br_ok:
         inc     bank
-        bne     @br_loop
+        bne     @br_lo
+        dex
+        bpl     @br_hi
         jsr     test_end
 
-        ; 2. PROTECT
+        ; 3. PROTECT
         jsr     print_win
         PRINT   s_protect
         jsr     test_begin
         lda     #0                      ; bank 0, offset 0 = $11
-        ldy     #BANK_REG
-        sta     (ptr),y
         sta     bank
+        sta     bank+1
+        jsr     write_bank
         lda     #$11
         ldy     #0
         sta     (ptr),y
@@ -182,24 +276,27 @@ test_window:
         ldy     #0
         sta     (ptr),y
         lda     #$07                    ; must be ignored
-        ldy     #BANK_REG
+        ldy     #BANK_L
+        sta     (ptr),y
+        ldy     #BANK_H
         sta     (ptr),y
         lda     #DEV_ID | $01           ; select: bit 7 = 1
         ldy     #LATCH
         sta     (ptr),y
-        ldy     #BANK_REG               ; bank still 0
+        ldy     #BANK_L                 ; bank still 0
+        lda     (ptr),y
+        bne     @pr_bank_err
+        ldy     #BANK_H
         lda     (ptr),y
         beq     @pr_bank_ok
+@pr_bank_err:
         sta     got
+        sty     offs
         lda     #0
         sta     expect
-        lda     #BANK_REG
-        sta     offs
         jsr     report
 @pr_bank_ok:
-        ldy     #BANK_REG               ; force bank 0 for the RAM check
-        lda     #0
-        sta     (ptr),y
+        jsr     write_bank              ; force bank 0 for the RAM check
         ldy     #0                      ; offset 0 still $11
         lda     (ptr),y
         cmp     #$11
@@ -213,7 +310,7 @@ test_window:
 @pr_ram_ok:
         jsr     test_end
 
-        ; 3. MARCH: pattern, then complement.
+        ; 4. MARCH: pattern, then complement.
         jsr     print_win
         PRINT   s_march
         jsr     test_begin
@@ -228,17 +325,66 @@ test_window:
         jsr     verify_all
         jsr     test_end
 
+        ; 5. LIMIT: bank = count has no RAM behind it.
+        jsr     print_win
+        PRINT   s_limit
+        jsr     test_begin
+        lda     count
+        sta     bank
+        lda     count+1
+        sta     bank+1
+        jsr     write_bank
+        lda     #$5A
+        ldy     #0
+        sta     (ptr),y
+        ldy     #1
+        sta     (ptr),y
+        ldy     #RAM_SIZE - 1
+        sta     (ptr),y
+        lda     #0                      ; first bank intact
+        sta     bank
+        sta     bank+1
+        jsr     verify_bank
+        sec                             ; last bank intact
+        lda     count
+        sbc     #1
+        sta     bank
+        lda     count+1
+        sbc     #0
+        sta     bank+1
+        jsr     verify_bank
+        jsr     test_end
+
+@done:
         jsr     deselect
         rts
 
+hi_values: .byte $00, $55, $AA, $FF
+
 ; ---------------------------------------------------------------------------
-; fill_all / verify_all: every bank, every offset, value = offset EOR bank
-; EOR key.
+; Bank patterns.  Bank b, key k:  byte 0 = b lo EOR k, byte 1 = b hi EOR k,
+; byte n (2-$7F) = n EOR b lo EOR b hi EOR k.
 ; ---------------------------------------------------------------------------
-fill_all:
-        lda     #0
-        sta     bank
-@bank:
+; set_bank: bank register = bank, bk = bank lo EOR bank hi EOR key.
+set_bank:
+        jsr     write_bank
+        lda     bank
+        eor     bank+1
+        eor     key
+        sta     bk
+        rts
+
+write_bank:
+        lda     bank
+        ldy     #BANK_L
+        sta     (ptr),y
+        lda     bank+1
+        ldy     #BANK_H
+        sta     (ptr),y
+        rts
+
+; fill_bank: write the pattern of the current bank.
+fill_bank:
         jsr     set_bank
         ldy     #RAM_SIZE - 1
 @byte:
@@ -246,44 +392,98 @@ fill_all:
         eor     bk
         sta     (ptr),y
         dey
-        bpl     @byte
-        inc     bank
-        bne     @bank
+        cpy     #2
+        bcs     @byte
+        lda     bank+1
+        eor     key
+        sta     (ptr),y                 ; y = 1
+        dey
+        lda     bank
+        eor     key
+        sta     (ptr),y                 ; y = 0
         rts
 
-verify_all:
-        lda     #0
-        sta     bank
-@bank:
+; verify_bank: check the pattern of the current bank.
+verify_bank:
         jsr     set_bank
         ldy     #RAM_SIZE - 1
 @byte:
         tya
         eor     bk
         cmp     (ptr),y
-        bne     @err
+        beq     @next
+        jsr     vb_report
 @next:
         dey
-        bpl     @byte
-        inc     bank
-        bne     @bank
+        cpy     #2
+        bcs     @byte
+        lda     bank+1                  ; y = 1
+        eor     key
+        cmp     (ptr),y
+        beq     @byte0
+        jsr     vb_report
+@byte0:
+        ldy     #0
+        lda     bank
+        eor     key
+        cmp     (ptr),y
+        beq     @done
+        jsr     vb_report
+@done:
         rts
-@err:
+
+; vb_report: A = expected, Y = offset; keeps Y.
+vb_report:
         sta     expect
         lda     (ptr),y
         sta     got
         sty     offs
         jsr     report
         ldy     offs
-        jmp     @next
+        rts
 
-; set_bank: bank register = bank, bk = bank EOR key.
-set_bank:
+; fill_all / verify_all: banks 0 .. count-1.
+fill_all:
+        lda     #0
+        sta     bank
+        sta     bank+1
+@loop:
+        jsr     fill_bank
+        jsr     next_bank
+        bne     @loop
+        rts
+
+verify_all:
+        lda     #0
+        sta     bank
+        sta     bank+1
+@loop:
+        jsr     verify_bank
+        jsr     next_bank
+        bne     @loop
+        rts
+
+; next_bank: bank = bank + 1; Z = 1 when bank == count.
+next_bank:
+        inc     bank
+        bne     @cmp
+        inc     bank+1
+@cmp:
         lda     bank
-        ldy     #BANK_REG
-        sta     (ptr),y
-        eor     key
-        sta     bk
+        cmp     count
+        bne     @done
+        lda     bank+1
+        cmp     count+1
+@done:
+        rts
+
+read_count:
+        ldy     #COUNT_L
+        lda     (ptr),y
+        sta     count
+        ldy     #COUNT_H
+        lda     (ptr),y
+        sta     count+1
         rts
 
 select:
@@ -345,7 +545,7 @@ test_end:
         jmp     putc
 
 ; report: one error at bank / offs, expected / got.  Counts it and prints
-; the first MAX_REPORT.  Keeps bank, offs; clobbers A, X, Y.
+; the first MAX_REPORT of the test.  Keeps bank, offs; clobbers A, X, Y.
 report:
         inc     errs
         bne     @counted
@@ -366,6 +566,8 @@ report:
         lda     ptr+1
         jsr     phex
         PRINT   s_b
+        lda     bank+1
+        jsr     phex
         lda     bank
         jsr     phex
         PRINT   s_o
@@ -440,10 +642,13 @@ putc:
         .segment "RODATA"
 
 s_title:   .byte ATCLR, "BANKED RAM TEST", ATEOL
-           .byte "WINDOW $xx00-$xx7F, BANK $xxFD", ATEOL, ATEOL, 0
+           .byte "RAM $xx00-$xx7F, COUNT $xxFB", ATEOL
+           .byte "BANK $xxFD, SELECT $xxFF", ATEOL, ATEOL, 0
+s_count:   .byte "COUNT    $", 0
 s_bankreg: .byte "BANK REG ", 0
 s_protect: .byte "PROTECT  ", 0
 s_march:   .byte "MARCH    ", 0
+s_limit:   .byte "LIMIT    ", 0
 s_keep:    .byte "D1 KEEP     ", 0
 s_ok:      .byte "OK", ATEOL, 0
 s_failn:   .byte "FAIL $", 0

@@ -7,8 +7,10 @@ The ESP32 behaves as a small banked RAM expansion on the Atari 800XL/130XE bus:
 - two independent windows, **$D100–$D1FF** (`~D1XX`) and **$D500–$D5FF**
   (`~CCTL`), both decoded by the Atari MMU / PLA; only **A0–A7** are sampled
 - per window: RAM window **$xx00–$xx7F** (128 bytes of the current bank),
-  bank register **$xxFD** (256 banks, 32 KB per window in ESP32 DRAM),
-  select latch **$xxFF** (bit 7, device ID `$80`)
+  bank count **$xxFB–$xxFC** (read-only), 16-bit bank register
+  **$xxFD–$xxFE**, select latch **$xxFF** (bit 7, device ID `$80`); the
+  banks come from the free ESP32 DRAM heap at boot (estimated 100–120 KB per
+  window, printed at boot)
 - never drives the bus when not selected; no ROM, no **MPD**, no **EXTSEL**
 - logs every access to both windows with microsecond timestamps via a
   lock-free ring buffer (Core 1 → Core 0)

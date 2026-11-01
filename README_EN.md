@@ -59,7 +59,8 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 
 ### Firmware
 - **ROM-less PBI / CCTL banked RAM**: two independent windows, $D100–$D1FF (`~D1XX`) and $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
-- **Per window**: RAM at $xx00–$xx7F (128 bytes of the current bank), bank register at $xxFD (256 banks, 32 KB per window in ESP32 DRAM), select latch at $xxFF (bit 7, device ID `$80`); when not selected it never drives the bus
+- **Per window**: RAM at $xx00–$xx7F (128 bytes of the current bank), bank count at $xxFB–$xxFC (read-only), 16-bit bank register at $xxFD–$xxFE, select latch at $xxFF (bit 7, device ID `$80`); when not selected it never drives the bus
+- **Banks from the heap**: at boot the firmware takes the free ESP32 DRAM and splits it between the two windows (estimated 100–120 KB per window, the exact value is printed at boot)
 - **No ROM, no MPD / EXTSEL**: every bus pin is an input, D0–D7 become outputs only to answer a read
 - **Dual-core**: Core 1 owns the bus (interrupts masked, decode during PHI1), Core 0 prints the log
 - **Lock-free log** (Core 1 → Core 0): every access to both windows and every latch change, with microsecond timestamps
@@ -215,12 +216,12 @@ The two windows are independent: each has its own latch, bank register and RAM.
 | Offset | Function | Notes |
 |--------|----------|-------|
 | **$00–$7F** | RAM window (128 bytes of the current bank) | Read and write only while the window is selected |
-| **$80–$FC** | Reserved | Never driven, writes ignored |
-| **$FD** | Bank register (R/W, 0–255) | 256 banks × 128 bytes = 32 KB per window |
-| **$FE** | Reserved | |
+| **$80–$FA** | Reserved | Never driven, writes ignored |
+| **$FB–$FC** | Number of banks of the window (R, 16 bit) | Depends on the free heap, writes ignored |
+| **$FD–$FE** | Bank register (R/W, 16 bit, little-endian) | A bank beyond the count does not respond |
 | **$FF** | Select latch (W: bit 7) | Never driven on reads ($D1FF is the PBI IRQ status) |
 
-Linear address in a window's RAM: bank = address >> 7, offset = address & $7F.  A loop over the whole window: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.  Power-up: deselected, bank 0, RAM `$00`; the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF / $D5FF.
+The banks are allocated at boot from the free ESP32 DRAM heap (minus 24 KB kept for the system) and split evenly between the two windows.  Linear address in a window's RAM: bank = address >> 7, offset = address & $7F.  A loop over the whole window: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.  Power-up: deselected, bank 0, RAM `$00`; the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF / $D5FF.
 
 ## 🚀 Installation and Setup
 
@@ -291,18 +292,20 @@ Timestamp format is `[seconds.microseconds]`:
 
 ```
 [6502_monitor] Banked RAM PBI / CCTL peripheral, device ID $80
-[6502_monitor] $D100-$D17F / $D500-$D57F: 256 banks x 128 bytes per window, bank $xxFD, select $xxFF
+[6502_monitor] $D100-$D17F / $D500-$D57F: <n> banks x 128 bytes = <k> KB per window
+[6502_monitor] Count $xxFB-$xxFC, bank $xxFD-$xxFE, select $xxFF; <b> heap blocks, <h> bytes of heap left
 [6502_monitor] Bus loop on Core 1 (settle 200 ns, write sample 120 ns), log 115200 baud
 [    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
-[    1.234601] [D1FD - BANK_SELECT         ] W $03  SEL
-[    1.234640] [D105 - RAM bank $03 +$05   ] W $AA  SEL
-[    1.234680] [D105 - RAM bank $03 +$05   ] R $AA  SEL DRV
-[    1.300000] [D500 - RAM bank $00 +$00   ] R $FF  -
+[    1.234601] [D1FD - BANK_SELECT_L       ] W $03  SEL
+[    1.234620] [D1FE - BANK_SELECT_H       ] W $01  SEL
+[    1.234640] [D105 - RAM bank $0103 +$05 ] W $AA  SEL
+[    1.234680] [D105 - RAM bank $0103 +$05 ] R $AA  SEL DRV
+[    1.300000] [D500 - RAM bank $0000 +$00 ] R $FF  -
 ```
 
 - `PBI_SELECT` / `CCTL_SELECT` — latch write and new state: `SELECTED` / `DESELECTED`
 - `SEL` = device selected in that window, `DRV` = byte driven by the device, `-` = not selected (the byte is whatever was on the bus)
-- Offsets are shown as `RAM bank $bb +$oo`, `BANK_SELECT`, `PBI_SELECT` / `CCTL_SELECT` or `RESERVED`
+- Offsets are shown as `RAM bank $bbbb +$oo`, `BANK_COUNT_L/H`, `BANK_SELECT_L/H`, `PBI_SELECT` / `CCTL_SELECT` or `RESERVED`; the bank numbers in the example are indicative
 - Timestamps come from the Core 1 cycle counter (CCOUNT extended to 64 bit)
 - Each line is a single `Serial.write()`: lines never interleave; events lost when the ring is full are counted
 - Read-only debug also on J4: GND (pin 1) and TX0 (pin 3, 3.3 V); leave RX0 (pin 2) unconnected
@@ -326,7 +329,7 @@ flowchart TD
     J --> L[Wait for PHI2 to fall]
     K --> M{Write to a window?}
     M -->|Yes $xxFF| N[Update the latch from bit 7]
-    M -->|Yes $xxFD| Q[Switch bank if selected]
+    M -->|Yes $xxFD-$xxFE| Q[Switch bank if selected]
     M -->|Yes $xx00-$xx7F| O[Store in RAM if selected]
     M -->|No| P[Sample the read byte for the log]
     N --> L
@@ -352,8 +355,8 @@ sequenceDiagram
     ESP->>ESP: selected (bit 7 = 1)
     ESP->>L: PBI_SELECT SELECTED
 
-    CPU->>ESP: Write $03 → $D1FD
-    ESP->>ESP: bank = 3
+    CPU->>ESP: Write $03 → $D1FD, $00 → $D1FE
+    ESP->>ESP: bank = $0003
     loop Accesses $D100-$D17F
         CPU->>ESP: STA $D1xx
         ESP->>ESP: ram[3][xx] = data

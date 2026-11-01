@@ -16,19 +16,22 @@ lock-free ring buffer.
   | Offset | Function |
   |---|---|
   | `$00-$7F` | RAM window: 128 bytes of the current bank (R/W) |
-  | `$80-$FC` | reserved: never driven, writes ignored |
-  | `$FD` | bank register (R/W): 0-255 |
-  | `$FE` | reserved |
+  | `$80-$FA` | reserved: never driven, writes ignored |
+  | `$FB-$FC` | number of banks of the window (R, 16 bit, little-endian) |
+  | `$FD-$FE` | bank register (R/W, 16 bit, little-endian) |
   | `$FF` | select latch (W): bit 7 = device ID `$80`; never driven on reads |
 
-  256 banks × 128 bytes = **32 KB per window**, 64 KB in total, held in ESP32
-  DRAM (separate for the two windows).  Linear address in a window's RAM:
-  bank = address >> 7, offset = address & `$7F`.  A 6502 loop over the whole
-  window: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.
+  The banks are allocated at boot from the free ESP32 DRAM heap (every
+  byte-addressable block, minus `BANK_HEAP_RESERVE` = 24 KB for the system)
+  and split evenly between the two windows: an estimated 100-120 KB per
+  window, to be confirmed on the board (the exact count is printed at boot
+  and readable at `$xxFB-$xxFC`).  A bank number at or beyond the count selects no RAM:
+  the window is not driven and writes are ignored.  Linear address in a
+  window's RAM: bank = address >> 7, offset = address & `$7F`.  A 6502 loop
+  over the whole window: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.
 - **PBI rules:** a write to `$D1FF` / `$D5FF` selects the device in that
   window when bit 7 is 1 and deselects it when bit 7 is 0.  Not selected,
-  the device never drives the bus and ignores writes to RAM and bank
-  register.  Power-up: deselected, bank 0, RAM `$00`; RAM is not kept across
+  the device never drives the bus and ignores writes to RAM and registers.  Power-up: deselected, bank 0, RAM `$00`; RAM is not kept across
   an ESP32 reset.
 - **No ROM, no MPD, no EXTSEL:** the OS PBI scan finds no signature at
   `$D803` / `$D80B` and skips the device; programs select it directly by
@@ -40,10 +43,11 @@ lock-free ring buffer.
   lines never interleave):
     ```
     [    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
-    [    1.234601] [D1FD - BANK_SELECT         ] W $03  SEL
-    [    1.234640] [D105 - RAM bank $03 +$05   ] W $AA  SEL
-    [    1.234680] [D105 - RAM bank $03 +$05   ] R $AA  SEL DRV
-    [    1.300000] [D500 - RAM bank $00 +$00   ] R $FF  -
+    [    1.234601] [D1FD - BANK_SELECT_L       ] W $03  SEL
+    [    1.234620] [D1FE - BANK_SELECT_H       ] W $01  SEL
+    [    1.234640] [D105 - RAM bank $0103 +$05 ] W $AA  SEL
+    [    1.234680] [D105 - RAM bank $0103 +$05 ] R $AA  SEL DRV
+    [    1.300000] [D500 - RAM bank $0000 +$00 ] R $FF  -
     ```
   `SEL` = device selected in that window, `DRV` = byte driven by the device,
   `-` = not selected (the logged byte is whatever was on the bus).
@@ -54,11 +58,12 @@ lock-free ring buffer.
   interrupt watchdog disabled, no FreeRTOS calls).  `~D1XX` is not
   PHI2-qualified, so A0-A7, R/W and the window selects are decoded during PHI1
   (`BUS_ADDR_SETTLE_NS`, default 200 ns after PHI2 falls) and the read byte
-  (RAM of the current bank or bank register) is already in `GPIO.out` when
+  (RAM of the current bank or a register) is already in `GPIO.out` when
   PHI2 rises: one store turns D0-D7 on.  The PHI1 decode is inline assembly
-  (28 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM
-  read), with the window state in a fixed-layout struct and a 256-entry
-  table for the byte-to-pins conversion.  A
+  (29 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM
+  read), with the window state in a fixed-layout struct (RAM pointer of the
+  current bank, latch, count and bank registers) and a 256-entry table for
+  the byte-to-pins conversion.  A
   select that appears only on the rising edge is handled from that sample
   (late drive).  Write data is sampled `BUS_WR_SAMPLE_NS` (default 120 ns)
   after PHI2 rises.  Optimizations ported from Vera-Module-RBL-XE.
@@ -66,8 +71,8 @@ lock-free ring buffer.
 
 ## Atari Test Program
 [`atari-test/`](atari-test/README.md): `banked_ram_test.xex` (cc65) checks
-bank register, deselect protection, a march over all 256 banks and window
-independence in `$D1xx` and `$D5xx`.  `make sim` / `make simall` run it on
+bank count, 16-bit bank register, deselect protection, a march over every
+bank, the bank limit and window independence in `$D1xx` and `$D5xx`.  `make sim` / `make simall` run it on
 py65 against a model of the device, with injected faults.
 
 ## Hardware Setup
