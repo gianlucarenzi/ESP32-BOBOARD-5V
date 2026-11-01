@@ -238,6 +238,10 @@ Wiring to the Atari 130XE (cartridge slot and ECI).  On the 800XL the PBI connec
 
 ![Atari wiring](firmware/6502_monitor/docs/wiring_atari.svg)
 
+Breadboard view, Fritzing style:
+
+![Atari breadboard](firmware/6502_monitor/docs/breadboard_atari.svg)
+
 The 256-byte banks are allocated at boot from the free ESP32 DRAM heap (minus 24 KB kept for the system); one RAM and one bank register for both modes.  Linear address: bank = address >> 8, offset = address & $FF.  Power-up: deselected, bank 0, RAM `$00`; the device does not see the Atari RESET and keeps its state, the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF / $D5FF.
 
 #### 3. Commodore 64: 256 KB GeoRAM (`c64` env)
@@ -259,6 +263,10 @@ The same board, built with the `c64` env (`-D BUS_C64=1`), becomes a GeoRAM-comp
 Wiring to the expansion port (C64 pinout checked against c64-wiki.com and retroisle.com):
 
 ![C64 wiring](firmware/6502_monitor/docs/wiring_c64.svg)
+
+Breadboard view, Fritzing style:
+
+![C64 breadboard](firmware/6502_monitor/docs/breadboard_c64.svg)
 
 
 | Signal | C64 port | J3 |

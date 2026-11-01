@@ -238,6 +238,10 @@ Collegamento all'Atari 130XE (slot cartuccia ed ECI).  Sull'800XL il connettore 
 
 ![Collegamento Atari](firmware/6502_monitor/docs/wiring_atari.svg)
 
+Vista breadboard, stile Fritzing:
+
+![Breadboard Atari](firmware/6502_monitor/docs/breadboard_atari.svg)
+
 I banchi da 256 byte vengono allocati all'avvio dall'heap DRAM libero dell'ESP32 (meno 24 KB di riserva per il sistema); una sola RAM e un solo registro del banco per le due modalità.  Indirizzo lineare: banco = indirizzo >> 8, offset = indirizzo & $FF.  All'accensione: non selezionato, banco 0, RAM a `$00`; il dispositivo non vede il RESET dell'Atari e mantiene lo stato, la RAM non si conserva al reset dell'ESP32.  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF / $D5FF.
 
 #### 3. Commodore 64: GeoRAM 256 KB (ambiente `c64`)
@@ -259,6 +263,10 @@ La stessa scheda, con l'ambiente `c64` (`-D BUS_C64=1`), diventa una GeoRAM comp
 Collegamento alla porta di espansione (pinout del C64 verificato su c64-wiki.com e retroisle.com):
 
 ![Collegamento C64](firmware/6502_monitor/docs/wiring_c64.svg)
+
+Vista breadboard, stile Fritzing:
+
+![Breadboard C64](firmware/6502_monitor/docs/breadboard_c64.svg)
 
 
 | Segnale | Porta C64 | J3 |

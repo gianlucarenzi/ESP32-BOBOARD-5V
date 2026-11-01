@@ -133,21 +133,17 @@ eci_bot = [("A", "reserved"), ("B", "~IRQ"), ("C", "~HALT"), ("D", "A13"),
            ("E", "A14"), ("F", "A15"), ("H", "GND")]
 CART, ECI = "Atari cartridge slot", "Atari 130XE ECI"
 sig2cart = {s: l for l, s in cart_top + cart_bot}
-links = []
+ATARI_LINKS = []
 for p, s in J3.items():
     if s in sig2cart and s not in ("GND", "+5V"):
-        links.append((p, s, CART, sig2cart[s]))
-links += [(11, "~D1XX", ECI, "3"), (29, "GND", CART, "B"), (30, "GND", ECI, "H"),
-          (31, "+5V", CART, "13")]
-draw("6502_monitor - Atari 130XE wiring (env nodemcu-32s)",
-     "J3 of the ESP32-BOBOARD-5V to the cartridge slot (~CCTL, bus) and the ECI (~D1XX)",
-     [(CART, "CART", 840, 130, [cart_top, cart_bot]), (ECI, "ECI", 840, 590, [eci_top, eci_bot])],
-     links,
-     ["Pinouts checked against atarimania.com, computersmuseum.com and the RetroBitLab KiCad library",
-      "(ATARI-CARTRIDGE / ECIBUS symbols; footprints: pins 1-15 / 1-7 on the back, A-S / A-H on the front, 1 opposite A).",
-      "800XL: the PBI connector carries no ~D1XX; $D1xx must be decoded from A8-A15 (external logic, not shown).",
-      "Never connect J3 26 (EN) and 27-28 (+3V3).  Program the ESP32 only disconnected from the computer."],
-     os.path.join(here, "wiring_atari.svg"))
+        ATARI_LINKS.append((p, s, CART, sig2cart[s]))
+ATARI_LINKS += [(11, "~D1XX", ECI, "3"), (29, "GND", CART, "B"), (30, "GND", ECI, "H"),
+                (31, "+5V", CART, "13")]
+ATARI_NOTES = [
+    "Pinouts checked against atarimania.com, computersmuseum.com and the RetroBitLab KiCad library",
+    "(ATARI-CARTRIDGE / ECIBUS symbols; footprints: pins 1-15 / 1-7 on the back, A-S / A-H on the front, 1 opposite A).",
+    "800XL: the PBI connector carries no ~D1XX; $D1xx must be decoded from A8-A15 (external logic, not shown).",
+    "Never connect J3 26 (EN) and 27-28 (+3V3).  Program the ESP32 only disconnected from the computer."]
 
 # ---- Commodore 64 expansion port (top 1-22, bottom A-Z) ------------------
 c64_top = [("1", "GND"), ("2", "+5V"), ("3", "+5V"), ("4", "~IRQ"), ("5", "R/W"),
@@ -162,18 +158,24 @@ c64_bot = [("A", "GND"), ("B", "~ROMH"), ("C", "~RESET"), ("D", "~NMI"), ("E", "
            ("Y", "A0"), ("Z", "GND")]
 C64 = "C64 expansion port"
 sig2c64 = {s: l for l, s in c64_top + c64_bot}
-links = []
+C64_LINKS = []
 for p, s in J3.items():
     if s in sig2c64 and s not in ("GND", "+5V"):
-        links.append((p, s, C64, sig2c64[s]))
-links += [(12, "~IO1", C64, "7"), (11, "~IO2", C64, "10"),
-          (29, "GND", C64, "1"), (30, "GND", C64, "Z"), (31, "+5V", C64, "2")]
-draw("6502_monitor - Commodore 64 GeoRAM wiring (env c64)",
-     "J3 of the ESP32-BOBOARD-5V to the C64 expansion port: /IO1 on J3 12, /IO2 on J3 11",
-     [(C64, "C64", 840, 130, [c64_top, c64_bot])],
-     links,
-     ["Pinout checked against c64-wiki.com, retroisle.com and the Programmer's Reference Guide tables.",
-      "J3 11 / 12 are labelled ~D1XX / ~CCTL on the board: with the c64 build they read /IO2 / /IO1.",
-      "Never connect J3 26 (EN) and 27-28 (+3V3).  Program the ESP32 only disconnected from the computer."],
-     os.path.join(here, "wiring_c64.svg"))
-print("wiring_atari.svg, wiring_c64.svg")
+        C64_LINKS.append((p, s, C64, sig2c64[s]))
+C64_LINKS += [(12, "~IO1", C64, "7"), (11, "~IO2", C64, "10"),
+              (29, "GND", C64, "1"), (30, "GND", C64, "Z"), (31, "+5V", C64, "2")]
+C64_NOTES = [
+    "Pinout checked against c64-wiki.com, retroisle.com and the Programmer's Reference Guide tables.",
+    "J3 11 / 12 are labelled ~D1XX / ~CCTL on the board: with the c64 build they read /IO2 / /IO1.",
+    "Never connect J3 26 (EN) and 27-28 (+3V3).  Program the ESP32 only disconnected from the computer."]
+
+if __name__ == "__main__":
+    draw("6502_monitor - Atari 130XE wiring (env nodemcu-32s)",
+         "J3 of the ESP32-BOBOARD-5V to the cartridge slot (~CCTL, bus) and the ECI (~D1XX)",
+         [(CART, "CART", 840, 130, [cart_top, cart_bot]), (ECI, "ECI", 840, 590, [eci_top, eci_bot])],
+         ATARI_LINKS, ATARI_NOTES, os.path.join(here, "wiring_atari.svg"))
+    draw("6502_monitor - Commodore 64 GeoRAM wiring (env c64)",
+         "J3 of the ESP32-BOBOARD-5V to the C64 expansion port: /IO1 on J3 12, /IO2 on J3 11",
+         [(C64, "C64", 840, 130, [c64_top, c64_bot])],
+         C64_LINKS, C64_NOTES, os.path.join(here, "wiring_c64.svg"))
+    print("wiring_atari.svg, wiring_c64.svg")
