@@ -14,7 +14,7 @@
 \begin{document}
 \maketitle
 
-ROM-less PBI / CCTL peripheral: 20 bus signals, all through the TXS0108E level translators.
+Banked RAM PBI / CCTL peripheral: 20 bus signals, all through the TXS0108E level translators.
 
 \section{Data Bus (Bidirectional)}
 \begin{table}[H]
@@ -77,7 +77,7 @@ GPIO 0  & BOOT & Not on the 30-pin headers \\ \bottomrule
 \section{Notes}
 \begin{itemize}
     \item \textbf{A0--A7 only:} the page (\$D1 or \$D5) comes from the select line.
-    \item \textbf{D0--D7} are driven only while the device answers a read of a selected register.
+    \item \textbf{D0--D7} are driven only while the device answers a read of a selected window (RAM or bank register).
     \item U4 channel 8 (pins 9 / 12) and J3 pins 24--25 are unconnected.
     \item All signals pass through \textbf{TXS0108E} bidirectional level shifters (3.3\,V\,$\leftrightarrow$\,5\,V).
 \end{itemize}

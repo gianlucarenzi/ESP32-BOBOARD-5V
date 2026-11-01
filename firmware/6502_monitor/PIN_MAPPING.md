@@ -1,6 +1,6 @@
 # 6502 Monitor — ESP32 Pin Mapping (NodeMCU DevKit V1)
 
-ROM-less PBI / CCTL peripheral: 20 bus signals, all through the TXS0108E
+Banked RAM PBI / CCTL peripheral: 20 bus signals, all through the TXS0108E
 level translators.
 
 ## 1. Data Bus (Bidirectional)
@@ -16,7 +16,7 @@ level translators.
 | **D7** | GPIO 19 | D19 |
 
 D0-D7 are inputs; the firmware drives them only while answering a read of a
-selected register.
+selected window (RAM or bank register).
 
 ## 2. Address Bus (A0-A7)
 | 6502 Signal | ESP32 GPIO | Board Label | Note |

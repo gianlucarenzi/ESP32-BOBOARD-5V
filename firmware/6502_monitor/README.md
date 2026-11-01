@@ -1,51 +1,64 @@
-# Atari ROM-less PBI / CCTL Peripheral & Bus Monitor
+# Atari Banked RAM PBI / CCTL Peripheral & Bus Monitor
 
-ESP32 firmware for the ESP32-BOBOARD-5V that behaves as a ROM-less Atari 8-bit
-peripheral in two register windows, `$D100-$D1FF` (PBI) and `$D500-$D5FF`
-(CCTL), and logs every access to both windows over a lock-free ring buffer.
+ESP32 firmware for the ESP32-BOBOARD-5V that behaves as a small banked RAM
+expansion in the Atari I/O area, in two independent windows, `$D100-$D1FF`
+(PBI) and `$D500-$D5FF` (CCTL), and logs every access to both windows over a
+lock-free ring buffer.
 
 ## Features
-- **Two register windows**, selected by the Atari MMU / PLA:
-    - `~D1XX` → `$D100-$D1FF`, select latch at `$D1FF`.
-    - `~CCTL` → `$D500-$D5FF`, select latch at `$D5FF`.
+- **Two independent windows**, selected by the Atari MMU / PLA:
+    - `~D1XX` → `$D100-$D1FF`
+    - `~CCTL` → `$D500-$D5FF`
 
-  Only A0-A7 are sampled: the page comes from the select line.  Each window
-  has its own latch and its own 256-byte register file.
-- **PBI rules:**
-    - A write to `$D1FF` / `$D5FF` selects the device when bit 7 (device ID
-      `$80`) is 1 and deselects it when bit 7 is 0.
-    - While selected, writes to `$xx00-$xxFE` are stored and reads of
-      `$xx00-$xxFE` are answered with the stored byte.
-    - Not selected, the device never drives the bus.  `$D1FF` / `$D5FF` are
-      never driven on reads (`$D1FF` is the PBI interrupt status read by the OS).
-    - The registers are written only by the Atari; power-up value `$00`.
+  Only A0-A7 are sampled: the page comes from the select line.
+- **Register map** (same in both windows, each with its own state):
+
+  | Offset | Function |
+  |---|---|
+  | `$00-$7F` | RAM window: 128 bytes of the current bank (R/W) |
+  | `$80-$FC` | reserved: never driven, writes ignored |
+  | `$FD` | bank register (R/W): 0-255 |
+  | `$FE` | reserved |
+  | `$FF` | select latch (W): bit 7 = device ID `$80`; never driven on reads |
+
+  256 banks × 128 bytes = **32 KB per window**, 64 KB in total, held in ESP32
+  DRAM (separate for the two windows).  Linear address in a window's RAM:
+  bank = address >> 7, offset = address & `$7F`.  A 6502 loop over the whole
+  window: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.
+- **PBI rules:** a write to `$D1FF` / `$D5FF` selects the device in that
+  window when bit 7 is 1 and deselects it when bit 7 is 0.  Not selected,
+  the device never drives the bus and ignores writes to RAM and bank
+  register.  Power-up: deselected, bank 0, RAM `$00`; RAM is not kept across
+  an ESP32 reset.
 - **No ROM, no MPD, no EXTSEL:** the OS PBI scan finds no signature at
   `$D803` / `$D80B` and skips the device; programs select it directly by
-  writing `$80` to `$D1FF` (and `$00` to release it).  EXTSEL is not needed:
-  there is no internal RAM to replace in the I/O area.
+  writing `$80` to `$D1FF` / `$D5FF` (and `$00` to release it).
 - **Bus monitor:** every access to both windows is logged, selected or not;
-  reads of other devices are sampled just before PHI2 falls.  Registers
-  `$00-$1A` are shown with their VERA names; `$09-$0C` are resolved through
-  DCSEL (bits `[2:1]` of the last write to offset `$05`, per window).
+  reads of other devices are sampled just before PHI2 falls.
 - **Serial output** (`LogTask` on Core 0, the only writer on Serial, 115200
   baud by default, `-D LOG_BAUD=...`; each line is one `Serial.write()`, so
   lines never interleave):
     ```
     [    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
-    [    1.234601] [D105 - VERA_CTRL           ] W $04  SEL
-    [    1.234640] [D105 - VERA_CTRL           ] R $04  SEL DRV
-    [    1.300000] [D500 - VERA_ADDR_L         ] R $FF  -
+    [    1.234601] [D1FD - BANK_SELECT         ] W $03  SEL
+    [    1.234640] [D105 - RAM bank $03 +$05   ] W $AA  SEL
+    [    1.234680] [D105 - RAM bank $03 +$05   ] R $AA  SEL DRV
+    [    1.300000] [D500 - RAM bank $00 +$00   ] R $FF  -
     ```
   `SEL` = device selected in that window, `DRV` = byte driven by the device,
   `-` = not selected (the logged byte is whatever was on the bus).
   Timestamps come from the Core 1 cycle counter (CCOUNT extended to 64 bit),
   in µs since the bus loop started.  Events are dropped and counted when the
-  1024-entry ring is full.
+  1024-entry ring is full: a block copy through the window easily fills it.
 - **Bus loop:** IRAM-resident `MonitorTask` owns Core 1 (interrupts masked,
   interrupt watchdog disabled, no FreeRTOS calls).  `~D1XX` is not
   PHI2-qualified, so A0-A7, R/W and the window selects are decoded during PHI1
   (`BUS_ADDR_SETTLE_NS`, default 200 ns after PHI2 falls) and the read byte
-  is already in `GPIO.out` when PHI2 rises: one store turns D0-D7 on.  A
+  (RAM of the current bank or bank register) is already in `GPIO.out` when
+  PHI2 rises: one store turns D0-D7 on.  The PHI1 decode is inline assembly
+  (28 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM
+  read), with the window state in a fixed-layout struct and a 256-entry
+  table for the byte-to-pins conversion.  A
   select that appears only on the rising edge is handled from that sample
   (late drive).  Write data is sampled `BUS_WR_SAMPLE_NS` (default 120 ns)
   after PHI2 rises.  Optimizations ported from Vera-Module-RBL-XE.

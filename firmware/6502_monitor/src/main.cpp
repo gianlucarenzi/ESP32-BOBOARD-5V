@@ -3,23 +3,28 @@
  *
  * FIRMWARE: Targets NodeMCU DevKit V1 (ESP32-WROOM, Xtensa LX6).
  *
- * BEHAVIOUR:
- * - Two register windows, decoded by the Atari MMU / PLA:
+ * BEHAVIOUR: a small banked RAM expansion in the Atari I/O area.
+ * - Two windows, decoded by the Atari MMU / PLA:
  *     ~D1XX  $D100-$D1FF  (PBI device area)
  *     ~CCTL  $D500-$D5FF  (cartridge control area)
  *   Only A0-A7 are sampled: the page comes from the select line.
- * - Each window has its own select latch and its own 256-byte register file:
- *     $D1FF / $D5FF write: bit 7 (PBI device ID $80) selects (1) or
- *     deselects (0) the device in that window.
- *     $xx00-$xxFE write while selected: stored in the register file.
- *     $xx00-$xxFE read  while selected: the device drives the stored byte.
- *   The latch address itself is never driven on reads ($D1FF is the PBI
- *   interrupt status, read by the OS).  Not selected: the device never drives
- *   the bus, as every PBI device.
- * - The registers are written only by the Atari (power-up value $00).
+ * - Each window is independent, with its own latch, bank register and RAM:
+ *     $xx00-$xx7F  RAM window: 128 bytes of the current bank
+ *     $xxFD        bank register (R/W): 0-255, 256 banks of 128 bytes
+ *                  = 32 KB per window, held in ESP32 DRAM
+ *     $xxFF        select latch (W): bit 7 (PBI device ID $80) selects (1)
+ *                  or deselects (0) the device in that window
+ *     $xx80-$xxFC, $xxFE  reserved: never driven, writes ignored
+ * - Selected: RAM and bank register are read and written.  Not selected:
+ *   the device never drives the bus and ignores writes, as every PBI device;
+ *   the latch is always written.  The latch address itself is never driven
+ *   on reads ($D1FF is the PBI interrupt status, read by the OS).
+ * - Power-up: both windows deselected, bank 0, RAM $00.  RAM is not kept
+ *   across an ESP32 reset.
  * - No ROM: the OS PBI scan does not find a signature at $D803 / $D80B and
- *   skips the device; programs select it directly through $D1FF.
- * - No MPD / EXTSEL: no ROM at $D800, no RAM to replace in the I/O area.
+ *   skips the device; programs select it directly through $D1FF / $D5FF.
+ * - No MPD / EXTSEL: no ROM at $D800, no internal RAM to replace in the I/O
+ *   area.
  * - LOG: lock-free ring from the Core 1 bus loop to LogTask on Core 0; prints
  *   latch changes and every access to both windows, selected or not.
  *
@@ -148,7 +153,13 @@ static_assert(PIN_A6 >= 21 && PIN_A6 <= 27 && PIN_A7 >= 21 && PIN_A7 <= 27,
 // Device
 // ---------------------------------------------------------------------------
 #define PBI_DEV_ID   0x80u  // PBI device ID bit, also the CCTL select bit
+#define RAM_WIN_SIZE 128u   // $xx00-$xx7F
+#define BANKS        256u   // 8-bit bank register
+#define BANK_OFFSET  0xFDu  // $D1FD / $D5FD
 #define LATCH_OFFSET 0xFFu  // $D1FF / $D5FF
+
+static_assert((RAM_WIN_SIZE & (RAM_WIN_SIZE - 1u)) == 0 && RAM_WIN_SIZE <= BANK_OFFSET,
+              "RAM window: power of two, below the bank register");
 
 #define WIN_D1XX 0
 #define WIN_CCTL 1
@@ -156,10 +167,29 @@ static_assert(PIN_A6 >= 21 && PIN_A6 <= 27 && PIN_A7 >= 21 && PIN_A7 <= 27,
 
 static const uint8_t WIN_PAGE[WINDOWS] = {0xD1, 0xD5};
 
-// Register files, written only by the Atari.
-static DRAM_ATTR uint8_t  regs[WINDOWS][256];
-// GPIO.out words (D0-D7) of regs[][], kept in step on every write.
-static DRAM_ATTR uint32_t regs_out[WINDOWS][256];
+// Banked RAM, one area per window (2 x 32 KB), written only by the Atari.
+// Plain .bss in DRAM: zeroed at start-up.
+static DRAM_ATTR uint8_t bank_ram[WINDOWS][BANKS][RAM_WIN_SIZE];
+
+// Window state, read by the bus loop assembly: field offsets are fixed.
+typedef struct {
+    uint8_t *ram;     // +0  bank_ram[win][bank]
+    uint8_t  sel;     // +4  select latch (0 / 1)
+    uint8_t  bank;    // +5  bank register
+    uint8_t  pad[2];
+} WinState;
+
+static_assert(sizeof(WinState) == 8 && offsetof(WinState, ram) == 0 &&
+              offsetof(WinState, sel) == 4 && offsetof(WinState, bank) == 5,
+              "WinState layout used by the bus loop assembly");
+static_assert(WIN_D1XX == 0 && WIN_CCTL == 1, "window index used by the bus loop assembly");
+static_assert(RAM_WIN_SIZE == 128u && BANK_OFFSET == 0xFDu,
+              "bgeui 128 / movi 0xFD in the bus loop assembly");
+
+static DRAM_ATTR WinState win_state[WINDOWS];
+
+// GPIO.out word (D0-D7) for each byte value.
+static DRAM_ATTR uint32_t drive_lut[256];
 
 // ---------------------------------------------------------------------------
 // Log Ring (Core 1 bus loop → Core 0 LogTask)
@@ -171,7 +201,7 @@ static DRAM_ATTR uint32_t regs_out[WINDOWS][256];
 #define LOG_RING_SIZE 1024u   // power of two
 
 #define EVT_LATCH 0   // select latch change ($D1FF / $D5FF write)
-#define EVT_REG   1   // register access
+#define EVT_REG   1   // access to RAM, bank register or reserved offsets
 
 // flags: bit 0 = write   bit 1 = device selected (EVT_REG) / new latch state
 //        (EVT_LATCH)     bit 2 = byte driven by this device (reads)
@@ -187,6 +217,7 @@ typedef struct {
     uint8_t  offset;  // A0-A7
     uint8_t  data;
     uint8_t  flags;
+    uint8_t  bank;    // bank register of the window at the time of the access
 } LogEvt;
 
 static DRAM_ATTR LogEvt   log_ring[LOG_RING_SIZE];
@@ -245,13 +276,15 @@ static void build_tables(void)
         addr_lut_hi[i] = addr_bits(i, hi_pins, hi_abits, 6, 32);
     for (uint32_t i = 0; i < 128; i++)
         addr_lut_lo[i] = addr_bits(i, lo_pins, lo_abits, 2, 21);
+    for (uint32_t i = 0; i < 256; i++)
+        drive_lut[i] = encode_data(i);
 
     for (uint32_t w = 0; w < WINDOWS; w++)
-        for (uint32_t a = 0; a < 256; a++)
-        {
-            regs[w][a]     = 0x00;
-            regs_out[w][a] = encode_data(0x00);
-        }
+    {
+        win_state[w].ram  = bank_ram[w][0];
+        win_state[w].sel  = 0;
+        win_state[w].bank = 0;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +400,28 @@ static void bus_int_wdt_disable(void)
     wdt_hal_write_protect_enable(&ctx);
 }
 
+/*
+ * Byte the device answers with at offset `off` of a window: the RAM of the
+ * current bank or the bank register.  Returns 0 when the device must not
+ * drive the bus (not selected, latch, reserved offsets).
+ */
+BUS_INLINE uint32_t dev_read(const WinState *ws, uint32_t off, uint32_t *val)
+{
+    if (!ws->sel)
+        return 0;
+    if (off < RAM_WIN_SIZE)
+    {
+        *val = ws->ram[off];
+        return 1;
+    }
+    if (off == BANK_OFFSET)
+    {
+        *val = ws->bank;
+        return 1;
+    }
+    return 0;
+}
+
 // ============================================================================
 // MonitorTask -- Core 1, IRAM-resident, interrupts masked
 //
@@ -385,7 +440,6 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
     const uint32_t wr_sample = NS_TO_CYCLES(BUS_WR_SAMPLE_NS);
     const uint32_t phi2_max  = NS_TO_CYCLES(BUS_PHI2_HIGH_MAX_NS);
 
-    uint8_t  selected[WINDOWS] = {0, 0};  // select latches
     uint32_t cyc_hi = 0;                  // CCOUNT wraps every 2^32 / 240 MHz = 17.9 s
     uint32_t t_prev = cpu_ll_get_cycle_count();
 
@@ -423,17 +477,63 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
 
         // 3. Address, R/W and window selects, once stable.
         wait_until(t_fall + settle);
-        uint32_t lo  = gpio_in();
-        uint32_t hi  = gpio_in1();
-        uint32_t off = decode_addr(lo, hi);
-        bool     rd  = (lo & m_rw) != 0;
-        int      win = !(lo & m_d1xx) ? WIN_D1XX : (!(lo & m_cctl) ? WIN_CCTL : -1);
 
-        // 4. Read of a selected register: byte into GPIO.out now (outputs
-        //    off), outputs on at the PHI2 rising edge.
-        uint32_t drive = (win >= 0 && rd && selected[win] && off != LATCH_OFFSET);
-        if (drive)
-            gpio_out(regs_out[win][off]);
+        /*
+         * 4. PHI1 decode, in assembly so that every operand stays in a
+         *    register: A0-A7 from the tables, window from ~D1XX / ~CCTL; on
+         *    a read of the RAM window or of the bank register with the
+         *    device selected, the byte goes into GPIO.out now (outputs
+         *    off) and the outputs are turned on at the PHI2 rising edge.
+         *    win = 0 ($D1xx), 1 ($D5xx), -1 (neither).
+         */
+        uint32_t lo, off, t, val, ws, drive;
+        int32_t  win;
+        asm volatile(
+            "   l32i   %[lo], %[gpio], %[o_in]    \n\t"   /* GPIO.in  */
+            "   l32i   %[t], %[gpio], %[o_in1]    \n\t"   /* GPIO.in1 */
+            "   extui  %[t], %[t], 0, 8           \n\t"   /* GPIO 32-39 */
+            "   add    %[t], %[t], %[luthi]       \n\t"
+            "   l8ui   %[off], %[t], 0            \n\t"   /* A0-A5 */
+            "   extui  %[t], %[lo], 21, 7         \n\t"   /* GPIO 21-27 */
+            "   add    %[t], %[t], %[lutlo]       \n\t"
+            "   l8ui   %[t], %[t], 0              \n\t"   /* A6, A7 */
+            "   or     %[off], %[off], %[t]       \n\t"
+            "   movi   %[drv], 0                  \n\t"
+            "   movi   %[val], 0                  \n\t"
+            "   mov    %[ws], %[st]               \n\t"
+            "   movi   %[win], 0                  \n\t"
+            "   bbci   %[lo], %[b_d1], 1f         \n\t"   /* ~D1XX low: window 0 */
+            "   addi   %[ws], %[st], 8            \n\t"
+            "   movi   %[win], 1                  \n\t"
+            "   bbci   %[lo], %[b_cc], 1f         \n\t"   /* ~CCTL low: window 1 */
+            "   movi   %[win], -1                 \n\t"
+            "   j      9f                         \n\t"
+            "1: bbci   %[lo], %[b_rw], 9f         \n\t"   /* write cycle */
+            "   l8ui   %[t], %[ws], 4             \n\t"   /* sel */
+            "   beqz   %[t], 9f                   \n\t"
+            "   bgeui  %[off], 128, 2f            \n\t"   /* RAM_WIN_SIZE */
+            "   l32i   %[t], %[ws], 0             \n\t"   /* ram */
+            "   add    %[t], %[t], %[off]         \n\t"
+            "   l8ui   %[val], %[t], 0            \n\t"
+            "   j      3f                         \n\t"
+            "2: movi   %[t], 0xFD                 \n\t"   /* BANK_OFFSET */
+            "   bne    %[off], %[t], 9f           \n\t"
+            "   l8ui   %[val], %[ws], 5           \n\t"   /* bank */
+            "3: addx4  %[t], %[val], %[dlut]      \n\t"
+            "   l32i   %[t], %[t], 0              \n\t"
+            "   s32i   %[t], %[gpio], %[o_out]    \n\t"   /* GPIO.out, outputs off */
+            "   movi   %[drv], 1                  \n\t"
+            "9:                                   \n\t"
+            : [lo] "=&r"(lo), [off] "=&r"(off), [t] "=&r"(t), [val] "=&r"(val),
+              [ws] "=&r"(ws), [drv] "=&r"(drive), [win] "=&r"(win)
+            : [gpio] "r"(&GPIO), [luthi] "r"(addr_lut_hi), [lutlo] "r"(addr_lut_lo),
+              [dlut] "r"(drive_lut), [st] "r"(win_state),
+              [o_in] "n"(GPIO_OFF(in)), [o_in1] "n"(GPIO_OFF(in1)),
+              [o_out] "n"(GPIO_OFF(out)),
+              [b_d1] "n"(PIN_D1XX_N), [b_cc] "n"(PIN_CCTL_N), [b_rw] "n"(PIN_RW)
+            : "memory");
+        (void)ws;
+        const bool rd = (lo & m_rw) != 0;
 
         const uint32_t s_rise = wait_phi2_high_drive(drive);
         const uint32_t t_rise = cpu_ll_get_cycle_count();
@@ -452,10 +552,10 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
                 wait_phi2_low();            // not our windows
                 continue;
             }
-            drive = (rd && selected[win] && off != LATCH_OFFSET);
+            drive = rd ? dev_read(&win_state[win], off, &val) : 0;
             if (drive)
             {
-                gpio_out(regs_out[win][off]);
+                gpio_out(drive_lut[val]);
                 bus_drive_enable();
             }
         }
@@ -464,15 +564,17 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
         pend.cyc_hi = cyc_hi;
         pend.win    = (uint8_t)win;
         pend.offset = (uint8_t)off;
+        WinState *const st = &win_state[win];
+        pend.bank   = st->bank;
         pend_valid  = true;
 
         if (rd)
         {
             pend.type  = EVT_REG;
-            pend.flags = (selected[win] ? FL_SEL : 0u) | (drive ? FL_DRIVEN : 0u);
+            pend.flags = (st->sel ? FL_SEL : 0u) | (drive ? FL_DRIVEN : 0u);
             if (drive)
             {
-                pend.data = regs[win][off];
+                pend.data = (uint8_t)val;
                 wait_phi2_low();
             }
             else
@@ -497,9 +599,9 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             {
                 // $D1FF / $D5FF: each device latches only its own ID bit.
                 const uint8_t sel = (data & PBI_DEV_ID) ? 1u : 0u;
-                if (sel != selected[win])
+                if (sel != st->sel)
                 {
-                    selected[win] = sel;
+                    st->sel = sel;
                     pend.type  = EVT_LATCH;
                     pend.flags = FL_WRITE | (sel ? FL_SEL : 0u);
                 }
@@ -512,90 +614,24 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             else
             {
                 pend.type  = EVT_REG;
-                pend.flags = FL_WRITE | (selected[win] ? FL_SEL : 0u);
-                if (selected[win])
+                pend.flags = FL_WRITE | (st->sel ? FL_SEL : 0u);
+                if (st->sel)
                 {
-                    regs[win][off]     = data;
-                    regs_out[win][off] = encode_data(data);
+                    if (off < RAM_WIN_SIZE)
+                    {
+                        st->ram[off] = data;
+                    }
+                    else if (off == BANK_OFFSET)
+                    {
+                        st->bank = data;
+                        st->ram  = bank_ram[win][data];
+                    }
+                    // $xx80-$xxFC, $xxFE: reserved, ignored
                 }
             }
             wait_phi2_low();
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// VERA register name lookup — Core 0 only (LogTask), not IRAM-resident.
-// Registers $09-$0C are muxed by DCSEL (bits [2:1] of VERA_CTRL, offset $05).
-// ---------------------------------------------------------------------------
-static const char *vera_reg_name(uint8_t offset, uint8_t dcsel)
-{
-    static const char *base[8] = {
-        "VERA_ADDR_L",  // $00
-        "VERA_ADDR_M",  // $01
-        "VERA_ADDR_H",  // $02
-        "VERA_DATA0",   // $03
-        "VERA_DATA1",   // $04
-        "VERA_CTRL",    // $05
-        "VERA_IEN",     // $06
-        "VERA_ISR",     // $07
-    };
-    if (offset < 8)
-        return base[offset];
-
-    if (offset == 0x08)
-        return "VERA_IRQLINE_L";
-
-    if (offset >= 0x09 && offset <= 0x0C)
-    {
-        static const char *mux[7][4] = {
-            // DCSEL=0
-            { "VERA_DC_VIDEO",    "VERA_DC_HSCALE",       "VERA_DC_VSCALE",       "VERA_DC_BORDER"      },
-            // DCSEL=1
-            { "VERA_DC_HSTART",   "VERA_DC_HSTOP",        "VERA_DC_VSTART",       "VERA_DC_VSTOP"       },
-            // DCSEL=2
-            { "VERA_FX_CTRL",     "VERA_FX_TILEBASE",     "VERA_FX_MAPBASE",      "VERA_FX_MULT"        },
-            // DCSEL=3
-            { "VERA_FX_X_INCR_L", "VERA_FX_X_INCR_H",    "VERA_FX_Y_INCR_L",    "VERA_FX_Y_INCR_H"   },
-            // DCSEL=4
-            { "VERA_FX_X_POS_L",  "VERA_FX_X_POS_H",     "VERA_FX_Y_POS_L",     "VERA_FX_Y_POS_H"    },
-            // DCSEL=5
-            { "VERA_FX_X_POS_S",  "VERA_FX_Y_POS_S",     "VERA_FX_POLY_FILL_L", "VERA_FX_POLY_FILL_H" },
-            // DCSEL=6
-            { "VERA_FX_CACHE_L",  "VERA_FX_CACHE_M",     "VERA_FX_CACHE_H",     "VERA_FX_CACHE_U"     },
-        };
-        return mux[(dcsel < 7) ? dcsel : 0][offset - 0x09];
-    }
-
-    if (offset >= 0x0D && offset <= 0x13)
-    {
-        static const char *l0[7] = {
-            "VERA_L0_CONFIG",    // $0D
-            "VERA_L0_MAPBASE",   // $0E
-            "VERA_L0_TILEBASE",  // $0F
-            "VERA_L0_HSCR_L",   // $10
-            "VERA_L0_HSCR_H",   // $11
-            "VERA_L0_VSCR_L",   // $12
-            "VERA_L0_VSCR_H",   // $13
-        };
-        return l0[offset - 0x0D];
-    }
-
-    if (offset >= 0x14 && offset <= 0x1A)
-    {
-        static const char *l1[7] = {
-            "VERA_L1_CONFIG",    // $14
-            "VERA_L1_MAPBASE",   // $15
-            "VERA_L1_TILEBASE",  // $16
-            "VERA_L1_HSCR_L",   // $17
-            "VERA_L1_HSCR_H",   // $18
-            "VERA_L1_VSCR_L",   // $19
-            "VERA_L1_VSCR_H",   // $1A
-        };
-        return l1[offset - 0x14];
-    }
-
-    return "?";
 }
 
 // ============================================================================
@@ -641,12 +677,24 @@ static void log_line(const char *fmt, ...)
     Serial.write((const uint8_t *)buf, (size_t)n);
 }
 
+// Name of an offset within a window, for the log.
+static const char *offset_name(uint8_t w, uint8_t off, uint8_t bank, char *buf, size_t len)
+{
+    if (off < RAM_WIN_SIZE)
+    {
+        snprintf(buf, len, "RAM bank $%02X +$%02X", bank, off);
+        return buf;
+    }
+    if (off == BANK_OFFSET)
+        return "BANK_SELECT";
+    if (off == LATCH_OFFSET)
+        return (w == WIN_D1XX) ? "PBI_SELECT" : "CCTL_SELECT";
+    return "RESERVED";
+}
+
 static void log_drain(void)
 {
-    // Shadow of VERA_CTRL DCSEL bits [2:1] per window; updated on every
-    // write to offset $05.
-    static uint8_t  dcsel[WINDOWS] = {0, 0};
-    static uint32_t dropped_seen   = 0;
+    static uint32_t dropped_seen = 0;
 
     uint32_t t = log_tail;
     while (t != __atomic_load_n(&log_head, __ATOMIC_ACQUIRE))
@@ -659,27 +707,22 @@ static void log_drain(void)
         const uint32_t us    = (uint32_t)(ts_us % 1000000ULL);
         const uint8_t  w     = evt.win < WINDOWS ? evt.win : 0;
         const uint8_t  page  = WIN_PAGE[w];
+        char           nbuf[24];
+        const char    *name  = offset_name(w, evt.offset, evt.bank, nbuf, sizeof(nbuf));
 
         if (evt.type == EVT_LATCH)
         {
             log_line("[%5lu.%06lu] [%02X%02X - %-20s] W $%02X  device %s\n",
                      (unsigned long)sec, (unsigned long)us, page, evt.offset,
-                     (w == WIN_D1XX) ? "PBI_SELECT" : "CCTL_SELECT", evt.data,
+                     name, evt.data,
                      (evt.flags & FL_SEL) ? "SELECTED" : "DESELECTED");
         }
         else  // EVT_REG
         {
-            const bool wr = (evt.flags & FL_WRITE) != 0;
-            // Track DCSEL so muxed registers ($09-$0C) resolve correctly.
-            if (evt.offset == 0x05 && wr)
-                dcsel[w] = (evt.data >> 1) & 0x07;
-
-            const char *name = (evt.offset == LATCH_OFFSET)
-                                   ? ((w == WIN_D1XX) ? "PBI_SELECT" : "CCTL_SELECT")
-                                   : vera_reg_name(evt.offset, dcsel[w]);
-            const char *tag  = !(evt.flags & FL_SEL)     ? "-"
-                               : (evt.flags & FL_DRIVEN) ? "SEL DRV"
-                                                         : "SEL";
+            const bool  wr  = (evt.flags & FL_WRITE) != 0;
+            const char *tag = !(evt.flags & FL_SEL)     ? "-"
+                              : (evt.flags & FL_DRIVEN) ? "SEL DRV"
+                                                        : "SEL";
             log_line("[%5lu.%06lu] [%02X%02X - %-20s] %c $%02X  %s\n",
                      (unsigned long)sec, (unsigned long)us, page, evt.offset,
                      name, wr ? 'W' : 'R', evt.data, tag);
@@ -699,9 +742,10 @@ static void LogTask(void *arg)
 {
     Serial.begin(LOG_BAUD, SERIAL_8N1, -1, PIN_UART_TX);
 
-    log_line("\n[6502_monitor] ROM-less PBI / CCTL peripheral, device ID $%02X\n",
+    log_line("\n[6502_monitor] Banked RAM PBI / CCTL peripheral, device ID $%02X\n",
              (unsigned)PBI_DEV_ID);
-    log_line("[6502_monitor] Windows $D100-$D1FE (select $D1FF), $D500-$D5FE (select $D5FF)\n");
+    log_line("[6502_monitor] $D100-$D17F / $D500-$D57F: %u banks x %u bytes per window, "
+             "bank $xxFD, select $xxFF\n", (unsigned)BANKS, (unsigned)RAM_WIN_SIZE);
     log_line("[6502_monitor] Bus loop on Core 1 (settle %u ns, write sample %u ns), "
              "log %u baud\n",
              (unsigned)BUS_ADDR_SETTLE_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);

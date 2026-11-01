@@ -43,7 +43,7 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - Monitoring and debugging 6502 systems
 - PBI peripheral implementation for Atari
 - Data/address bus traffic analysis
-- Register-based peripheral emulation ($D1xx / $D5xx)
+- Banked RAM expansions in the I/O area ($D1xx / $D5xx)
 - Smart cartridge development
 
 ## ✨ Key Features
@@ -58,8 +58,8 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - **Status LEDs** and control buttons
 
 ### Firmware
-- **ROM-less PBI / CCTL peripheral**: windows $D100–$D1FF (`~D1XX`) and $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
-- **Select latch** per window at $D1FF / $D5FF (bit 7, device ID `$80`): while selected it stores writes and answers reads of $xx00–$xxFE, when not selected it never drives the bus
+- **ROM-less PBI / CCTL banked RAM**: two independent windows, $D100–$D1FF (`~D1XX`) and $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
+- **Per window**: RAM at $xx00–$xx7F (128 bytes of the current bank), bank register at $xxFD (256 banks, 32 KB per window in ESP32 DRAM), select latch at $xxFF (bit 7, device ID `$80`); when not selected it never drives the bus
 - **No ROM, no MPD / EXTSEL**: every bus pin is an input, D0–D7 become outputs only to answer a read
 - **Dual-core**: Core 1 owns the bus (interrupts masked, decode during PHI1), Core 0 prints the log
 - **Lock-free log** (Core 1 → Core 0): every access to both windows and every latch change, with microsecond timestamps
@@ -203,21 +203,24 @@ The firmware is based on FreeRTOS and uses both ESP32 cores:
 
 #### 1. Bus cycle
 
-- **PHI1**: 200 ns after PHI2 falls (`BUS_ADDR_SETTLE_NS`) it samples A0–A7, R/W, `~D1XX` and `~CCTL`; for a read of a selected register it writes the byte to `GPIO.out` with the outputs still off
+- **PHI1**: 200 ns after PHI2 falls (`BUS_ADDR_SETTLE_NS`) it samples A0–A7, R/W, `~D1XX` and `~CCTL`; for a read of the RAM or bank register of a selected window it writes the byte to `GPIO.out` with the outputs still off
 - **PHI2 rising edge**: one store turns D0–D7 on; if the select shows up only on the rising edge, the byte is driven late
 - **Write**: data sampled 120 ns after PHI2 rises (`BUS_WR_SAMPLE_NS`)
 - **PHI2 falling edge**: D0–D7 released; the cycle's event goes to the log during the next PHI1
 
-#### 2. PBI / CCTL Implementation
+#### 2. PBI / CCTL Banked RAM
 
-| Address Range | Function | Notes |
-|----------------|----------|-------|
-| **$D100–$D1FE** | Registers (256 bytes) | Read and write only while the device is selected |
-| **$D1FF** | Select latch (W: bit 7) | Never driven on reads (PBI IRQ status) |
-| **$D500–$D5FE** | CCTL registers (256 bytes) | As above, separate latch |
-| **$D5FF** | CCTL select latch (W: bit 7) | Never driven on reads |
+The two windows are independent: each has its own latch, bank register and RAM.
 
-The registers are written only by the Atari (power-up value `$00`).  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF.
+| Offset | Function | Notes |
+|--------|----------|-------|
+| **$00–$7F** | RAM window (128 bytes of the current bank) | Read and write only while the window is selected |
+| **$80–$FC** | Reserved | Never driven, writes ignored |
+| **$FD** | Bank register (R/W, 0–255) | 256 banks × 128 bytes = 32 KB per window |
+| **$FE** | Reserved | |
+| **$FF** | Select latch (W: bit 7) | Never driven on reads ($D1FF is the PBI IRQ status) |
+
+Linear address in a window's RAM: bank = address >> 7, offset = address & $7F.  A loop over the whole window: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.  Power-up: deselected, bank 0, RAM `$00`; the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF / $D5FF.
 
 ## 🚀 Installation and Setup
 
@@ -287,18 +290,19 @@ Core 0 prints every event that Core 1 records in a lock-free ring buffer.
 Timestamp format is `[seconds.microseconds]`:
 
 ```
-[6502_monitor] ROM-less PBI / CCTL peripheral, device ID $80
-[6502_monitor] Windows $D100-$D1FE (select $D1FF), $D500-$D5FE (select $D5FF)
+[6502_monitor] Banked RAM PBI / CCTL peripheral, device ID $80
+[6502_monitor] $D100-$D17F / $D500-$D57F: 256 banks x 128 bytes per window, bank $xxFD, select $xxFF
 [6502_monitor] Bus loop on Core 1 (settle 200 ns, write sample 120 ns), log 115200 baud
 [    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
-[    1.234601] [D105 - VERA_CTRL           ] W $04  SEL
-[    1.234640] [D105 - VERA_CTRL           ] R $04  SEL DRV
-[    1.300000] [D500 - VERA_ADDR_L         ] R $FF  -
+[    1.234601] [D1FD - BANK_SELECT         ] W $03  SEL
+[    1.234640] [D105 - RAM bank $03 +$05   ] W $AA  SEL
+[    1.234680] [D105 - RAM bank $03 +$05   ] R $AA  SEL DRV
+[    1.300000] [D500 - RAM bank $00 +$00   ] R $FF  -
 ```
 
 - `PBI_SELECT` / `CCTL_SELECT` — latch write and new state: `SELECTED` / `DESELECTED`
 - `SEL` = device selected in that window, `DRV` = byte driven by the device, `-` = not selected (the byte is whatever was on the bus)
-- Registers $00–$1A are shown with their VERA names; $09–$0C are resolved through DCSEL (bits [2:1] of the last write to offset $05)
+- Offsets are shown as `RAM bank $bb +$oo`, `BANK_SELECT`, `PBI_SELECT` / `CCTL_SELECT` or `RESERVED`
 - Timestamps come from the Core 1 cycle counter (CCOUNT extended to 64 bit)
 - Each line is a single `Serial.write()`: lines never interleave; events lost when the ring is full are counted
 - Read-only debug also on J4: GND (pin 1) and TX0 (pin 3, 3.3 V); leave RX0 (pin 2) unconnected
@@ -314,7 +318,7 @@ flowchart TD
     C --> D[PHI2 falls: release D0-D7, log previous cycle]
     D --> E[Wait BUS_ADDR_SETTLE_NS]
     E --> F[Sample A0-A7, R/W, ~D1XX, ~CCTL]
-    F --> G{Read of a selected register?}
+    F --> G{Read of RAM or bank with the window selected?}
     G -->|Yes| H[Byte into GPIO.out, outputs off]
     G -->|No| I[No outputs]
     H --> J[PHI2 rises: turn D0-D7 on]
@@ -322,9 +326,11 @@ flowchart TD
     J --> L[Wait for PHI2 to fall]
     K --> M{Write to a window?}
     M -->|Yes $xxFF| N[Update the latch from bit 7]
-    M -->|Yes $xx00-$xxFE| O[Store the register if selected]
+    M -->|Yes $xxFD| Q[Switch bank if selected]
+    M -->|Yes $xx00-$xx7F| O[Store in RAM if selected]
     M -->|No| P[Sample the read byte for the log]
     N --> L
+    Q --> L
     O --> L
     P --> L
     L --> D
@@ -346,11 +352,13 @@ sequenceDiagram
     ESP->>ESP: selected (bit 7 = 1)
     ESP->>L: PBI_SELECT SELECTED
 
-    loop Accesses $D100-$D1FE
+    CPU->>ESP: Write $03 → $D1FD
+    ESP->>ESP: bank = 3
+    loop Accesses $D100-$D17F
         CPU->>ESP: STA $D1xx
-        ESP->>ESP: store reg[xx]
+        ESP->>ESP: ram[3][xx] = data
         CPU->>ESP: LDA $D1xx
-        ESP->>CPU: drive reg[xx] on D0-D7
+        ESP->>CPU: drive ram[3][xx] on D0-D7
         ESP->>L: R/W event
     end
 
@@ -400,7 +408,7 @@ gantt
 ### Monitor Performance
 
 - **Sampling**: one bus cycle at a time, Core 1 fully dedicated
-- **Read response**: byte prepared during PHI1, outputs on right after PHI2 rises (to be measured with a scope)
+- **Read response**: byte (bank RAM or bank register) prepared during PHI1, outputs on right after PHI2 rises (to be measured with a scope)
 - **Serial throughput**: 115200 baud for debug (`LOG_BAUD`)
 - **Compatibility**: Atari PAL (1.77 MHz) and NTSC (1.79 MHz)
 
@@ -415,7 +423,7 @@ ESP32-BOBOARD-5V/
 │       ├── 📄 platformio.ini          # PlatformIO configuration (one environment: nodemcu-32s)
 │       ├── 📄 efuse_vdd_sdio.py       # VDD_SDIO efuse check/burn before every upload
 │       ├── 📁 src/
-│       │   └── 📄 main.cpp            # ESP32 firmware (ROM-less PBI/CCTL peripheral + monitor)
+│       │   └── 📄 main.cpp            # ESP32 firmware (PBI/CCTL banked RAM + monitor)
 │       ├── 📄 README.md, HARDWARE.md, PIN_MAPPING.md/.tex/.pdf, Logs.md
 ├── 📁 schematics/
 │   └── 📄 ESP32-BOBOARD-5V.pdf    # Electrical schematic

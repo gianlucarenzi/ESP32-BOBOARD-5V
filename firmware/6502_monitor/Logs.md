@@ -2,6 +2,15 @@
 
 ## 2026-11-01: Bus Loop Optimizations from RBL-XE, PBI Latch Rule, Serial Log
 
+### Banked RAM in the $D1xx / $D5xx Windows (supersedes the register file below)
+The ROM-less peripheral becomes a small banked RAM expansion.  Each window ($D100-$D1FF, $D500-$D5FF) is independent, with its own latch, bank register and RAM:
+- **Map**: `$xx00-$xx7F` RAM window (128 bytes of the current bank), `$xxFD` bank register (R/W, 256 banks), `$xxFF` select latch (W, bit 7 = device ID $80, never driven on reads), `$xx80-$xxFC` and `$xxFE` reserved (never driven, writes ignored).  RAM and bank register respond only while the window is selected.
+- **Why 128 bytes** (instead of 253 = $00-$FC): on a 6502 the whole window is one `LDX #$7F` ... `DEX` / `BPL` loop, and a linear address splits into bank / offset with shifts (address >> 7, address & $7F) instead of a division by 253.  The upper half stays free for future control registers.
+- **Memory**: 256 x 128 bytes = 32 KB per window, separate for the two windows: 64 KB of `.bss` in DRAM (static DRAM use 104 KB of 320 KB).  Power-up: bank 0, RAM $00; not kept across an ESP32 reset.
+- **Bus loop**: the per-byte `GPIO.out` words of the old register file (4 bytes per byte) do not scale to 64 KB.  The PHI1 decode is now inline assembly: window state in a fixed-layout struct (`WinState`: RAM pointer of the current bank, latch, bank), byte-to-pins conversion through a 256-entry `drive_lut`.  28 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM read (the same logic in C was ~50).  A bank register write only updates the RAM pointer.
+- **Log**: offsets shown as `RAM bank $bb +$oo`, `BANK_SELECT`, `PBI_SELECT` / `CCTL_SELECT`, `RESERVED`; the VERA register names and the DCSEL tracking are gone.  A block copy through the window fills the 1024-entry ring quickly: dropped events are counted.
+- **Timing estimate**: settle 200 ns + ~150 ns of GPIO loads and decode = byte on the bus ~70-100 ns after PHI2 rises, ~80 ns before the 6502 read setup limit (~179 ns after the rise).  To be measured.
+
 ### ROM-less PBI / CCTL Peripheral (supersedes the ROM and MPD / EXTSEL parts below)
 On this board MPD (GPIO0) and EXTSEL (GPIO3) never reached the Atari: GPIO0 is not on the 30-pin DevKit headers, GPIO3 only goes to J4 and the USB bridge TX.  Only one TXS0108E channel is free (U4 channel 8), and without MPD the PBI ROM at $D800 would collide with the internal Math Pack.  Decision: drop the ROM, keep the device in the I/O windows only.
 - **Signals**: D0-D7, A0-A7, PHI2, R/W, `~D1XX` (GPIO22) and `~CCTL` (GPIO23, the former ROMSEL channel) = 20 inputs, no output pins.  `~D1XX` / `~CCTL` come from the Atari MMU / PLA decode; `~D1XX` is not PHI2-qualified.  Freed: GPIO12 (A8, still wired), GPIO25 (A9), GPIO26 (A10).

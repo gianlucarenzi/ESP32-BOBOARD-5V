@@ -2,12 +2,13 @@
 
 ## 1. Overview
 
-The ESP32 behaves as a ROM-less peripheral on the Atari 800XL/130XE bus:
+The ESP32 behaves as a small banked RAM expansion on the Atari 800XL/130XE bus:
 
-- register windows **$D100–$D1FF** (`~D1XX`) and **$D500–$D5FF** (`~CCTL`), both
-  decoded by the Atari MMU / PLA; only **A0–A7** are sampled
-- select latch per window at **$D1FF** / **$D5FF** (bit 7, device ID `$80`);
-  while selected the device stores writes and answers reads of `$xx00–$xxFE`
+- two independent windows, **$D100–$D1FF** (`~D1XX`) and **$D500–$D5FF**
+  (`~CCTL`), both decoded by the Atari MMU / PLA; only **A0–A7** are sampled
+- per window: RAM window **$xx00–$xx7F** (128 bytes of the current bank),
+  bank register **$xxFD** (256 banks, 32 KB per window in ESP32 DRAM),
+  select latch **$xxFF** (bit 7, device ID `$80`)
 - never drives the bus when not selected; no ROM, no **MPD**, no **EXTSEL**
 - logs every access to both windows with microsecond timestamps via a
   lock-free ring buffer (Core 1 → Core 0)

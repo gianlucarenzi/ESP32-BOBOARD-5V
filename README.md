@@ -43,7 +43,7 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 - Monitoraggio e debug di sistemi 6502
 - Implementazione di periferiche PBI per Atari
 - Analisi del traffico del bus dati/indirizzi
-- Emulazione di periferiche a registri ($D1xx / $D5xx)
+- Espansioni RAM a banchi nell'area I/O ($D1xx / $D5xx)
 - Sviluppo di cartucce intelligenti
 
 ## ✨ Caratteristiche Principali
@@ -58,8 +58,8 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 - **LED di stato** e pulsanti di controllo
 
 ### Firmware
-- **Periferica PBI / CCTL senza ROM**: finestre $D100–$D1FF (`~D1XX`) e $D500–$D5FF (`~CCTL`), decodificate dalla MMU/PLA dell'Atari; solo A0–A7 campionati
-- **Latch di selezione** per finestra a $D1FF / $D5FF (bit 7, ID dispositivo `$80`): da selezionato memorizza le scritture e risponde alle letture di $xx00–$xxFE, da non selezionato non pilota mai il bus
+- **RAM a banchi PBI / CCTL senza ROM**: due finestre indipendenti, $D100–$D1FF (`~D1XX`) e $D500–$D5FF (`~CCTL`), decodificate dalla MMU/PLA dell'Atari; solo A0–A7 campionati
+- **Per finestra**: RAM a $xx00–$xx7F (128 byte del banco corrente), registro del banco a $xxFD (256 banchi, 32 KB per finestra nella DRAM dell'ESP32), latch di selezione a $xxFF (bit 7, ID dispositivo `$80`); da non selezionato non pilota mai il bus
 - **Nessuna ROM, nessun MPD / EXTSEL**: tutti i pin del bus sono ingressi, D0–D7 diventano uscite solo per rispondere a una lettura
 - **Dual-core**: Core 1 dedicato al bus (interrupt mascherati, decodifica durante PHI1), Core 0 stampa il log
 - **Log lock-free** (Core 1 → Core 0): ogni accesso alle due finestre e ogni cambio di latch, con timestamp in microsecondi
@@ -203,21 +203,24 @@ Il firmware è basato su FreeRTOS e utilizza entrambi i core dell'ESP32:
 
 #### 1. Ciclo di bus
 
-- **PHI1**: 200 ns dopo la discesa di PHI2 (`BUS_ADDR_SETTLE_NS`) campiona A0–A7, R/W, `~D1XX` e `~CCTL`; per una lettura di un registro selezionato scrive il byte in `GPIO.out` con le uscite ancora spente
+- **PHI1**: 200 ns dopo la discesa di PHI2 (`BUS_ADDR_SETTLE_NS`) campiona A0–A7, R/W, `~D1XX` e `~CCTL`; per una lettura della RAM o del registro del banco di una finestra selezionata scrive il byte in `GPIO.out` con le uscite ancora spente
 - **Salita di PHI2**: un solo store accende D0–D7; se la selezione compare solo sul fronte di salita, il byte viene pilotato in ritardo
 - **Scrittura**: il dato è campionato 120 ns dopo la salita di PHI2 (`BUS_WR_SAMPLE_NS`)
 - **Discesa di PHI2**: D0–D7 rilasciati; l'evento del ciclo va nel log durante la PHI1 successiva
 
-#### 2. Implementazione PBI / CCTL
+#### 2. RAM a banchi PBI / CCTL
 
-| Range Indirizzi | Funzione | Note |
-|----------------|----------|------|
-| **$D100–$D1FE** | Registri (256 byte) | Lettura e scrittura solo con il dispositivo selezionato |
-| **$D1FF** | Latch di selezione (W: bit 7) | Mai pilotato in lettura (stato IRQ PBI) |
-| **$D500–$D5FE** | Registri CCTL (256 byte) | Come sopra, latch separato |
-| **$D5FF** | Latch di selezione CCTL (W: bit 7) | Mai pilotato in lettura |
+Le due finestre sono indipendenti: ognuna ha il proprio latch, il proprio registro del banco e la propria RAM.
 
-I registri sono scritti solo dall'Atari (valore all'accensione `$00`).  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF.
+| Offset | Funzione | Note |
+|--------|----------|------|
+| **$00–$7F** | Finestra RAM (128 byte del banco corrente) | Lettura e scrittura solo con la finestra selezionata |
+| **$80–$FC** | Riservato | Mai pilotato, scritture ignorate |
+| **$FD** | Registro del banco (R/W, 0–255) | 256 banchi × 128 byte = 32 KB per finestra |
+| **$FE** | Riservato | |
+| **$FF** | Latch di selezione (W: bit 7) | Mai pilotato in lettura ($D1FF è lo stato IRQ PBI) |
+
+Indirizzo lineare nella RAM di una finestra: banco = indirizzo >> 7, offset = indirizzo & $7F.  Un ciclo su tutta la finestra: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.  All'accensione: non selezionata, banco 0, RAM a `$00`; la RAM non si conserva al reset dell'ESP32.  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF / $D5FF.
 
 ## 🚀 Installazione e Setup
 
@@ -287,18 +290,19 @@ Il firmware stampa su Core 0 ogni evento registrato da Core 1 in un ring buffer 
 Il formato è `[secondi.microsecondi]`:
 
 ```
-[6502_monitor] ROM-less PBI / CCTL peripheral, device ID $80
-[6502_monitor] Windows $D100-$D1FE (select $D1FF), $D500-$D5FE (select $D5FF)
+[6502_monitor] Banked RAM PBI / CCTL peripheral, device ID $80
+[6502_monitor] $D100-$D17F / $D500-$D57F: 256 banks x 128 bytes per window, bank $xxFD, select $xxFF
 [6502_monitor] Bus loop on Core 1 (settle 200 ns, write sample 120 ns), log 115200 baud
 [    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
-[    1.234601] [D105 - VERA_CTRL           ] W $04  SEL
-[    1.234640] [D105 - VERA_CTRL           ] R $04  SEL DRV
-[    1.300000] [D500 - VERA_ADDR_L         ] R $FF  -
+[    1.234601] [D1FD - BANK_SELECT         ] W $03  SEL
+[    1.234640] [D105 - RAM bank $03 +$05   ] W $AA  SEL
+[    1.234680] [D105 - RAM bank $03 +$05   ] R $AA  SEL DRV
+[    1.300000] [D500 - RAM bank $00 +$00   ] R $FF  -
 ```
 
 - `PBI_SELECT` / `CCTL_SELECT` — scrittura del latch e nuovo stato: `SELECTED` / `DESELECTED`
 - `SEL` = dispositivo selezionato in quella finestra, `DRV` = byte pilotato dal dispositivo, `-` = non selezionato (il byte è quello presente sul bus)
-- I registri $00–$1A sono mostrati con il nome VERA; $09–$0C sono risolti tramite DCSEL (bit [2:1] dell'ultima scrittura all'offset $05)
+- Gli offset sono mostrati come `RAM bank $bb +$oo`, `BANK_SELECT`, `PBI_SELECT` / `CCTL_SELECT` o `RESERVED`
 - Il timestamp viene dal contatore di cicli del Core 1 (CCOUNT esteso a 64 bit)
 - Ogni riga è una sola `Serial.write()`: le righe non si mescolano mai; gli eventi persi quando il ring è pieno vengono contati
 - Debug in sola lettura anche su J4: GND (pin 1) e TX0 (pin 3, 3,3 V); RX0 (pin 2) va lasciato scollegato
@@ -314,7 +318,7 @@ flowchart TD
     C --> D[PHI2 scende: rilascia D0-D7, log del ciclo precedente]
     D --> E[Attesa BUS_ADDR_SETTLE_NS]
     E --> F[Campiona A0-A7, R/W, ~D1XX, ~CCTL]
-    F --> G{Lettura di un registro selezionato?}
+    F --> G{Lettura di RAM o banco con la finestra selezionata?}
     G -->|Sì| H[Byte in GPIO.out, uscite spente]
     G -->|No| I[Nessuna uscita]
     H --> J[PHI2 sale: accende D0-D7]
@@ -322,9 +326,11 @@ flowchart TD
     J --> L[Attesa discesa PHI2]
     K --> M{Scrittura in una finestra?}
     M -->|Sì $xxFF| N[Aggiorna il latch con il bit 7]
-    M -->|Sì $xx00-$xxFE| O[Salva il registro se selezionato]
+    M -->|Sì $xxFD| Q[Cambia banco se selezionata]
+    M -->|Sì $xx00-$xx7F| O[Salva in RAM se selezionata]
     M -->|No| P[Campiona il dato letto per il log]
     N --> L
+    Q --> L
     O --> L
     P --> L
     L --> D
@@ -346,11 +352,13 @@ sequenceDiagram
     ESP->>ESP: selezionato (bit 7 = 1)
     ESP->>L: PBI_SELECT SELECTED
 
-    loop Accessi $D100-$D1FE
+    CPU->>ESP: Write $03 → $D1FD
+    ESP->>ESP: banco = 3
+    loop Accessi $D100-$D17F
         CPU->>ESP: STA $D1xx
-        ESP->>ESP: salva reg[xx]
+        ESP->>ESP: ram[3][xx] = dato
         CPU->>ESP: LDA $D1xx
-        ESP->>CPU: pilota reg[xx] su D0-D7
+        ESP->>CPU: pilota ram[3][xx] su D0-D7
         ESP->>L: evento R/W
     end
 
@@ -400,7 +408,7 @@ gantt
 ### Performance del Monitor
 
 - **Campionamento**: un ciclo di bus per volta, Core 1 dedicato al 100%
-- **Risposta in lettura**: byte preparato durante PHI1, uscite accese subito dopo la salita di PHI2 (da misurare all'oscilloscopio)
+- **Risposta in lettura**: byte (RAM del banco o registro del banco) preparato durante PHI1, uscite accese subito dopo la salita di PHI2 (da misurare all'oscilloscopio)
 - **Throughput seriale**: 115200 baud per debug (`LOG_BAUD`)
 - **Compatibilità**: Atari PAL (1.77 MHz) e NTSC (1.79 MHz)
 
@@ -415,7 +423,7 @@ ESP32-BOBOARD-5V/
 │       ├── 📄 platformio.ini          # Configurazione PlatformIO (un solo ambiente: nodemcu-32s)
 │       ├── 📄 efuse_vdd_sdio.py       # Controllo/programmazione efuse VDD_SDIO prima di ogni upload
 │       ├── 📁 src/
-│       │   └── 📄 main.cpp            # Firmware ESP32 (periferica PBI/CCTL senza ROM + monitor)
+│       │   └── 📄 main.cpp            # Firmware ESP32 (RAM a banchi PBI/CCTL + monitor)
 │       ├── 📄 README.md, HARDWARE.md, PIN_MAPPING.md/.tex/.pdf, Logs.md
 ├── 📁 schematics/
 │   └── 📄 ESP32-BOBOARD-5V.pdf    # Schema elettrico

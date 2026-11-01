@@ -8,7 +8,7 @@
 
 ## GPIO Assignment (Firmware)
 
-Firmware `6502_monitor`: periferica PBI / CCTL senza ROM, 20 segnali di bus.
+Firmware `6502_monitor`: RAM a banchi PBI / CCTL senza ROM, 20 segnali di bus.
 
 | Segnale | GPIO ESP32 | Etichetta Board | TXS0108E | Dir | Descrizione |
 | :--- | :---: | :--- | :---: | :---: | :--- |
@@ -51,8 +51,8 @@ Liberi anche il canale 8 di U4 (pin 9 / 12) e i pin 24–25 di J3.
 ## Note Tecniche
 
 - **Solo A0–A7**: la pagina ($D1 o $D5) è data dal segnale di selezione.
-- **D0–D7** sono ingressi; il firmware li pilota solo per rispondere a una lettura di un registro selezionato.
+- **D0–D7** sono ingressi; il firmware li pilota solo per rispondere a una lettura della RAM o del registro del banco di una finestra selezionata.
 - **Bus Indirizzi A0–A5**: nel registro `GPIO_IN1_REG` (GPIO 32–39); A6–A7 in `GPIO_IN_REG`, insieme ai segnali di controllo.
-- **Bus Dati**: GPIO non contigui → conversione con shift (`decode_data()` / `encode_data()`), parole `GPIO.out` precalcolate per i registri.
+- **Bus Dati**: GPIO non contigui → lettura con shift (`decode_data()`), scrittura tramite la tabella `drive_lut[256]` di parole `GPIO.out`.
 - **J4 (debug UART)**: GND (pin 1), RX0 (pin 2, da lasciare scollegato), TX0 (pin 3, 3,3 V).
 - Tutti i segnali Atari↔ESP32 passano attraverso i **TXS0108EPW** (3.3 V / 5 V); `TXS_EN` è tenuto alto da R1/R3/R4, SW1 lo porta a GND.
