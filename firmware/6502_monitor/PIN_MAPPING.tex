@@ -2,10 +2,14 @@
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
 \usepackage{geometry}
-\geometry{hmargin=0.8in,vmargin=0.5in}
+\geometry{hmargin=0.8in,vmargin=0.45in}
 \usepackage{booktabs}
 \usepackage{float}
-\setlength{\intextsep}{6pt}
+\usepackage[compact]{titlesec}
+\titlespacing*{\section}{0pt}{1.2ex}{0.6ex}
+\setlength{\intextsep}{4pt}
+\usepackage{enumitem}
+\setlist{nosep}
 
 \title{6502 Monitor -- ESP32 Pin Mapping (NodeMCU DevKit V1)}
 \author{Atari ESP32 Project}
@@ -72,6 +76,18 @@ GPIO 25 & D25  & Free TXS0108E channel (former A9) \\
 GPIO 26 & D26  & Free TXS0108E channel (former A10) \\
 GPIO 3  & RX0  & J4 pin 2 only; leave unconnected \\
 GPIO 0  & BOOT & Not on the 30-pin headers \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\section{Commodore 64 (env \texttt{c64}, GeoRAM 256\,KB)}
+Same pins; the two select inputs take the C64 I/O lines:
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{C64 Signal} & \textbf{Expansion Port} & \textbf{J3 Pin} & \textbf{Function} \\ \midrule
+/IO1 & pin 7  & 12 (GPIO 23, $\sim$CCTL) & RAM window \$DE00--\$DEFF \\
+/IO2 & pin 10 & 11 (GPIO 22, $\sim$D1XX) & \$DFFE page, \$DFFF block (W) \\ \bottomrule
 \end{tabular}
 \end{table}
 

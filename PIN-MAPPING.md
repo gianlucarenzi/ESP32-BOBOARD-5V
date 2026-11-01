@@ -48,6 +48,17 @@ Liberi anche il canale 8 di U4 (pin 9 / 12) e i pin 24–25 di J3.
 
 ---
 
+### Commodore 64 (ambiente `c64`, GeoRAM 256 KB)
+
+Stessi pin; i due ingressi di selezione ricevono le linee I/O del C64 (collegamento completo nel [README del firmware](firmware/6502_monitor/README.md#commodore-64-georam-env-c64)):
+
+| Segnale C64 | Porta di espansione | Pin J3 | Funzione |
+| :--- | :---: | :--- | :--- |
+| **/IO1** | 7  | 12 (GPIO 23, ingresso `~CCTL`) | Finestra RAM $DE00–$DEFF |
+| **/IO2** | 10 | 11 (GPIO 22, ingresso `~D1XX`) | $DFFE pagina, $DFFF blocco (W) |
+
+---
+
 ## Note Tecniche
 
 - **Solo A0–A7**: la pagina ($D1 o $D5) è data dal segnale di selezione.
