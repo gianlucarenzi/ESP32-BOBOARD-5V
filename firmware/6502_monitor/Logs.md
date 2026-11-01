@@ -1,5 +1,31 @@
 # Project Logs & Architectural Decisions
 
+## 2026-11-01: Bus Loop Optimizations from RBL-XE, PBI Latch Rule, Serial Log
+
+### Bus Loop Optimizations Ported from Vera-Module-RBL-XE
+Commit `a1e09b9` ports the RBL-XE (ESP32-S3) bus loop optimizations, adapted to the ESP32 classic (Xtensa LX6: no dedicated GPIO, no `ee.*` instructions, scattered bus pins):
+- **Core 1 belongs to the bus loop**: interrupts masked (`portDISABLE_INTERRUPTS()`), interrupt watchdog MWDT1 disabled (it checks CPU1 too and would reset the chip after 300 ms), no FreeRTOS call inside the loop.
+- **Lock-free log ring** replaces the FreeRTOS queue: 1024 entries, single producer / single consumer, events dropped and counted when full. No `xQueueSend()` and no `esp_timer_get_time()` in the bus loop: the timestamp is the Core 1 CCOUNT extended to 64 bit (wrap every 17.9 s detected on each PHI2 rising edge), printed in µs since the bus loop started. If PHI2 stops for more than 17.9 s, absolute timestamps shift by multiples of 17.9 s; short intervals stay exact.
+- **Critical path in inline assembly**: PHI2 wait, `GPIO.in` / `GPIO.in1` sampling, MPD and EXTSEL taken directly from the ROMSEL / SEL_N bits with `extui`, A0-A10 from two lookup tables (`addr_lut_hi[256]` for GPIO 32-39, `addr_lut_lo[128]` for GPIO 21-27, plus A8 on GPIO 12), D0-D7 from `rom_out[2048]` (precomputed `GPIO.out` words). One `GPIO.out` store carries D0-D7 + MPD + EXTSEL, then `GPIO.enable_w1ts`; no `memw`. About 21 instructions from the detected PHI2 edge to the bus drive, against ~45 for the same logic in C and the earlier 11 single-bit extractions plus a `memw` on every volatile access.
+- **Write data sampled at a fixed time**: `BUS_WR_SAMPLE_NS` (default 120 ns, `-D` tunable) after the detected PHI2 rising edge, via CCOUNT. Before, $D1FF and register writes were sampled right after the decode, probably before t_MDS. VERA read data is the last sample taken before PHI2 falls.
+- **Not ported**: RBL-XE decodes during PHI1, before PHI2 rises. Here ROMSEL / SEL_N come from the J3 connector and the board netlist does not show whether they are PHI2-qualified, so sampling stays on the PHI2 rising edge. (The 74HC138 wiring in the 2026-05-06 entry is a pure address decode, not PHI2-gated: if it is still current, PHI1 decode is possible at least for ROMSEL.)
+
+### Bug Fixes Found During the Port
+- **ROM in IRAM**: `pbi_rom`, `drive_lut` and the generated `pbi_driver[]` were `IRAM_ATTR` (0x4008xxxx). ESP32 IRAM only supports 32-bit accesses: the 8-bit loads of the bus loop raise LoadStoreError. All hot-loop data is now `DRAM_ATTR`; `6502/Makefile` generates `const uint8_t pbi_driver[]` (flash rodata, copied once into `pbi_rom[]` at boot) and regenerates the header when the Makefile changes.
+- **Log never printed**: in Arduino `loop()` runs on Core 1 (`CONFIG_ARDUINO_RUNNING_CORE 1`), the same core as `MonitorTask`, which has the highest priority and never yields: `loop()` starved. The log printer is now `LogTask`, pinned to Core 0.
+
+### PBI Latch Rule for ROMSEL / MPD
+Like every PBI device, the board answers in the ROMSEL window ($D800-$DFFF) only when its latch is active: MPD is asserted and the ROM is driven only with the latch on; with the latch off MPD and EXTSEL stay HIGH and the Atari Math Pack stays visible. The same rule applies in CCTL mode, with the latch at $D5FF instead of $D1FF. One extra `bnez` in the critical path. The README's CCTL description ("latch always active, MPD / EXTSEL unused") was wrong and has been corrected.
+
+### Serial Log: Single Writer, One Write per Line
+Commit `86cd2a3`:
+- **UART TX path** (arduino-esp32 2.0.14): 128-byte hardware FIFO, no TX ring buffer (`setTxBufferSize(0)`), so `Serial.write()` blocks `LogTask` until the last byte is in the FIFO. Only Core 0 blocks; the bus loop keeps filling the ring.
+- **Ordering**: `uartWriteBuf()` holds the UART mutex for the whole call, so one `write()` is never split; `Print::println()` is two writes and `Print::printf()` mallocs every line longer than 64 bytes. Every line is now formatted into a 128-byte local buffer (`log_line()`) and sent with a single `Serial.write()`.
+- **Single writer**: `setup()` no longer prints. `LogTask` prints the banner, the bus events, the dropped-event count and the bus loop start failure (flag set by `setup()`) in one sequence. ESP-IDF system logs (level ERROR, panic only) bypass the Arduino mutex.
+- **Baud rate**: `LOG_BAUD`, default 115200. A higher value (e.g. 921600) only drops fewer events during VERA bursts (~160 lines/s at 115200, ~1280 at 921600) and needs a matching `monitor_speed`; it does not affect ordering.
+
+---
+
 ## 2026-06-12: Firmware Simplification, Full 2 KB Decode, VERA Logging
 
 ### Firmware Simplification — Drop RESET / VCS / RAM Emulation
