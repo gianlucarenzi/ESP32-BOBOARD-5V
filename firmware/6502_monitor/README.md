@@ -1,7 +1,8 @@
-# Atari Banked RAM PBI / CCTL Peripheral & Bus Monitor
+# 200+ KB Paged RAM Expansion for the Atari 130XE, 256 KB GeoRAM-Compatible for the C64, & Bus Monitor
 
-ESP32 firmware for the ESP32-BOBOARD-5V that behaves as a banked RAM
-expansion in the Atari I/O area, GeoRAM style with fixed roles: the PBI page
+ESP32 firmware for the ESP32-BOBOARD-5V.  On the Atari 130XE it behaves as a
+200+ KB paged RAM expansion in the I/O area (GeoRAM-style, not compatible
+with the PORTB extended memory), with fixed roles: the PBI page
 `$D1xx` holds the registers, the CCTL page `$D500-$D5FF` is a 256-byte window
 on the RAM.  Every access to both pages is logged over a lock-free ring
 buffer.
@@ -82,9 +83,9 @@ bank count, 16-bit bank register, deselect protection, a march over every
 bank (all 256 offsets), the bank limit and the RAM kept across a deselect.  `make sim` / `make simall` run it on
 py65 against a model of the device, with injected faults.
 
-## Commodore 64: GeoRAM (env `c64`)
-`pio run -e c64` builds the same board as a GeoRAM-compatible expansion for
-the C64 expansion port (`-D BUS_C64=1`):
+## Commodore 64: 256 KB GeoRAM-Compatible RAM Expansion (env `c64`)
+`pio run -e c64` builds the same board as a GeoRAM-compatible RAM expansion
+for the C64 expansion port (`-D BUS_C64=1`):
 
 | Address | Function |
 |---|---|

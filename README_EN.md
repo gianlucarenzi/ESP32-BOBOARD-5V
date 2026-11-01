@@ -43,8 +43,8 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - Monitoring and debugging 6502 systems
 - PBI peripheral implementation for Atari
 - Data/address bus traffic analysis
-- Banked RAM expansions in the I/O area ($D1xx / $D5xx), GeoRAM style
-- 256 KB GeoRAM for the Commodore 64 expansion port (`c64` env)
+- 200+ KB paged RAM expansion for the Atari 130XE, 256-byte window at $D500 (GeoRAM-style)
+- 256 KB GeoRAM-compatible RAM expansion for the Commodore 64 expansion port (`c64` env)
 - Smart cartridge development
 
 ## ✨ Key Features
@@ -59,10 +59,10 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - **Status LEDs** and control buttons
 
 ### Firmware
-- **ROM-less PBI / CCTL banked RAM, GeoRAM style**: registers in $D100–$D1FF (`~D1XX`) and RAM window in $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
+- **200+ KB paged RAM expansion for the Atari 130XE, GeoRAM-style, ROM-less**: registers in $D100–$D1FF (`~D1XX`) and RAM window in $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
 - **Fixed roles**: 256-byte RAM window at $D500–$D5FF; registers in $D1xx: bank count at $D1FB–$D1FC (read-only), 16-bit bank register at $D1FD–$D1FE, PBI select latch at $D1FF (bit 7, device ID `$80`); when deselected it never drives the bus
 - **Banks from the heap**: at boot the firmware takes the free ESP32 DRAM in 256-byte banks (estimated 200–230 KB, the exact value is printed at boot)
-- **Commodore 64 (`c64` env)**: the same board on the expansion port as a GeoRAM-compatible expansion: RAM window in IO1 $DE00–$DEFF, page in $DFFE and 16 KB block in $DFFF (write-only); /IO1 on J3 pin 12, /IO2 on J3 pin 11; 256 KB (16 blocks, aliased like a real GeoRAM: ~210 KB from DRAM, the rest from the ESP32 IRAM)
+- **256 KB GeoRAM-compatible RAM expansion for the C64 (`c64` env)**: the same board on the expansion port: RAM window in IO1 $DE00–$DEFF, page in $DFFE and 16 KB block in $DFFF (write-only); /IO1 on J3 pin 12, /IO2 on J3 pin 11; 256 KB (16 blocks, aliased like a real GeoRAM: ~210 KB from DRAM, the rest from the ESP32 IRAM)
 - **No ROM, no MPD / EXTSEL**: every bus pin is an input, D0–D7 become outputs only to answer a read
 - **Dual-core**: Core 1 owns the bus (interrupts masked, decode during PHI1), Core 0 prints the log
 - **Lock-free log** (Core 1 → Core 0): every access to both pages and every latch change, with microsecond timestamps
@@ -211,7 +211,9 @@ The firmware is based on FreeRTOS and uses both ESP32 cores:
 - **Write**: data sampled 120 ns after PHI2 rises (`BUS_WR_SAMPLE_NS`)
 - **PHI2 falling edge**: D0–D7 released; the cycle's event goes to the log during the next PHI1
 
-#### 2. PBI / CCTL Banked RAM (GeoRAM Style)
+#### 2. Atari 130XE: 200+ KB Paged RAM Expansion (GeoRAM-Style)
+
+It is not a GeoRAM (none ever existed on the Atari) and it is not compatible with the 130XE / RAMBO extended memory banked through PORTB at $4000–$7FFF: DOS RAM disks and extended-memory programs do not see it, software has to be written for this map.  The exact amount (estimated 200–230 KB) is printed in the boot banner.
 
 Fixed roles, like the C64 GeoRAM between IO2 and IO1: the PBI page $D1xx holds the registers, the CCTL page $D500–$D5FF is a 256-byte window on the RAM.
 
@@ -235,9 +237,9 @@ Breadboard view, Fritzing style:
 
 The 256-byte banks are allocated at boot from the free ESP32 DRAM heap (minus 24 KB kept for the system).  Linear address: bank = address >> 8, offset = address & $FF.  Power-up: deselected, bank 0, RAM `$00`; the device does not see the Atari RESET and keeps its state, the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF; the scan writes `$80` then `$00` to $D1FF, so the device ends deselected.
 
-#### 3. Commodore 64: 256 KB GeoRAM (`c64` env)
+#### 3. Commodore 64: 256 KB GeoRAM-Compatible RAM Expansion (`c64` env)
 
-The same board, built with the `c64` env (`-D BUS_C64=1`), becomes a GeoRAM-compatible expansion for the C64 expansion port, with the same scheme as the Vera-Module-RBL-C64 firmware:
+The same board, built with the `c64` env (`-D BUS_C64=1`), becomes a GeoRAM-compatible RAM expansion (same registers $DE00, $DFFE, $DFFF) for the C64 expansion port, with the same scheme as the Vera-Module-RBL-C64 firmware.  "geoRAM" was a Berkeley Softworks product, made in the 512 KB size only: this is a 256 KB compatible unit, to be confirmed by the boot banner.
 
 | Address | Function | Notes |
 |---------|----------|-------|

@@ -62,7 +62,7 @@ U4 channel 8 (A8 pin 9 / B8 pin 12) and J3 pins 24-25 are also unconnected.
 
 ## 6. Commodore 64 (env `c64`, GeoRAM 256 KB)
 Same pins; the two select inputs take the C64 I/O lines (full wiring in
-[README.md](README.md#commodore-64-georam-env-c64)):
+[README.md](README.md#commodore-64-256-kb-georam-compatible-ram-expansion-env-c64)):
 
 | C64 Signal | Expansion Port | J3 Pin | Function |
 |---|---|---|---|

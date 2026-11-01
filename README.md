@@ -43,8 +43,8 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 - Monitoraggio e debug di sistemi 6502
 - Implementazione di periferiche PBI per Atari
 - Analisi del traffico del bus dati/indirizzi
-- Espansioni RAM a banchi nell'area I/O ($D1xx / $D5xx), stile GeoRAM
-- GeoRAM 256 KB per Commodore 64 sulla porta di espansione (ambiente `c64`)
+- Espansione RAM a pagine da oltre 200 KB per Atari 130XE, finestra da 256 byte in $D500 (in stile GeoRAM)
+- Espansione RAM 256 KB compatibile GeoRAM per Commodore 64, sulla porta di espansione (ambiente `c64`)
 - Sviluppo di cartucce intelligenti
 
 ## ✨ Caratteristiche Principali
@@ -59,10 +59,10 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 - **LED di stato** e pulsanti di controllo
 
 ### Firmware
-- **RAM a banchi PBI / CCTL senza ROM, stile GeoRAM**: registri in $D100–$D1FF (`~D1XX`) e finestra RAM in $D500–$D5FF (`~CCTL`), decodificate dalla MMU/PLA dell'Atari; solo A0–A7 campionati
+- **Espansione RAM a pagine da oltre 200 KB per Atari 130XE, in stile GeoRAM, senza ROM**: registri in $D100–$D1FF (`~D1XX`) e finestra RAM in $D500–$D5FF (`~CCTL`), decodificate dalla MMU/PLA dell'Atari; solo A0–A7 campionati
 - **Ruoli fissi**: finestra RAM di 256 byte in $D500–$D5FF; registri in $D1xx: numero di banchi a $D1FB–$D1FC (sola lettura), registro del banco a 16 bit a $D1FD–$D1FE, latch di selezione PBI a $D1FF (bit 7, ID dispositivo `$80`); da non selezionato non pilota mai il bus
 - **Banchi dall'heap**: all'avvio il firmware prende la DRAM libera dell'ESP32 in banchi da 256 byte (stima 200–230 KB, il valore esatto è stampato all'avvio)
-- **Commodore 64 (ambiente `c64`)**: la stessa scheda sulla porta di espansione come GeoRAM compatibile: finestra RAM in IO1 $DE00–$DEFF, pagina in $DFFE e blocco da 16 KB in $DFFF (solo scrittura); /IO1 su J3 pin 12, /IO2 su J3 pin 11; 256 KB (16 blocchi, con ripiegamento degli indirizzi come una GeoRAM vera: circa 210 KB dalla DRAM e il resto dall'IRAM dell'ESP32)
+- **Espansione RAM 256 KB compatibile GeoRAM per C64 (ambiente `c64`)**: la stessa scheda sulla porta di espansione: finestra RAM in IO1 $DE00–$DEFF, pagina in $DFFE e blocco da 16 KB in $DFFF (solo scrittura); /IO1 su J3 pin 12, /IO2 su J3 pin 11; 256 KB (16 blocchi, con ripiegamento degli indirizzi come una GeoRAM vera: circa 210 KB dalla DRAM e il resto dall'IRAM dell'ESP32)
 - **Nessuna ROM, nessun MPD / EXTSEL**: tutti i pin del bus sono ingressi, D0–D7 diventano uscite solo per rispondere a una lettura
 - **Dual-core**: Core 1 dedicato al bus (interrupt mascherati, decodifica durante PHI1), Core 0 stampa il log
 - **Log lock-free** (Core 1 → Core 0): ogni accesso alle due pagine e ogni cambio di latch, con timestamp in microsecondi
@@ -211,7 +211,9 @@ Il firmware è basato su FreeRTOS e utilizza entrambi i core dell'ESP32:
 - **Scrittura**: il dato è campionato 120 ns dopo la salita di PHI2 (`BUS_WR_SAMPLE_NS`)
 - **Discesa di PHI2**: D0–D7 rilasciati; l'evento del ciclo va nel log durante la PHI1 successiva
 
-#### 2. RAM a banchi PBI / CCTL (stile GeoRAM)
+#### 2. Atari 130XE: espansione RAM a pagine da oltre 200 KB (in stile GeoRAM)
+
+Non è una GeoRAM (sull'Atari non è mai esistita) e non è compatibile con la memoria estesa del 130XE / RAMBO, quella commutata via PORTB in $4000–$7FFF: DOS con RAMdisk e programmi per la memoria estesa non la vedono, serve software scritto per questa mappa.  La quantità esatta (stima 200–230 KB) la stampa il banner all'avvio.
 
 Ruoli fissi, come la GeoRAM del C64 fra IO2 e IO1: la pagina PBI $D1xx contiene i registri, la pagina CCTL $D500–$D5FF è una finestra di 256 byte sulla RAM.
 
@@ -235,9 +237,9 @@ Vista breadboard, stile Fritzing:
 
 I banchi da 256 byte vengono allocati all'avvio dall'heap DRAM libero dell'ESP32 (meno 24 KB di riserva per il sistema).  Indirizzo lineare: banco = indirizzo >> 8, offset = indirizzo & $FF.  All'accensione: non selezionato, banco 0, RAM a `$00`; il dispositivo non vede il RESET dell'Atari e mantiene lo stato, la RAM non si conserva al reset dell'ESP32.  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF; la scansione scrive `$80` e poi `$00` in $D1FF, quindi il dispositivo resta deselezionato.
 
-#### 3. Commodore 64: GeoRAM 256 KB (ambiente `c64`)
+#### 3. Commodore 64: espansione RAM 256 KB compatibile GeoRAM (ambiente `c64`)
 
-La stessa scheda, con l'ambiente `c64` (`-D BUS_C64=1`), diventa una GeoRAM compatibile per la porta di espansione del C64, con lo stesso schema del firmware di Vera-Module-RBL-C64:
+La stessa scheda, con l'ambiente `c64` (`-D BUS_C64=1`), diventa un'espansione RAM compatibile GeoRAM (stessi registri $DE00, $DFFE, $DFFF) per la porta di espansione del C64, con lo stesso schema del firmware di Vera-Module-RBL-C64.  "geoRAM" era un prodotto di Berkeley Softworks, solo nel taglio da 512 KB: questa è un'espansione compatibile da 256 KB, da confermare con il banner all'avvio.
 
 | Indirizzo | Funzione | Note |
 |-----------|----------|------|

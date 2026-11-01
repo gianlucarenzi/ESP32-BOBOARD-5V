@@ -19,7 +19,7 @@ The ESP32 behaves as a banked RAM expansion on the Atari 130XE bus (on the
 
 The `c64` build turns the same board into a GeoRAM for the Commodore 64
 expansion port (/IO1 on J3 pin 12, /IO2 on J3 pin 11): see
-[README.md](README.md#commodore-64-georam-env-c64).
+[README.md](README.md#commodore-64-256-kb-georam-compatible-ram-expansion-env-c64).
 
 All 5 V Atari signals pass through **TXS0108E** bidirectional level translators
 before reaching the 3.3 V ESP32 GPIOs; D0–D7 are driven back through them on
