@@ -140,6 +140,12 @@ Log lines: `[DE05 - RAM blk $03 pg $10 +$05] R $AA  SEL DRV`,
 `GEORAM_PAGE`, `GEORAM_BLOCK`.  As on the Atari, the module is programmed
 only disconnected from the computer, from the PC.
 
+## Atari RAM Disk (D9:)
+[`atari-geodisk/`](atari-geodisk/README.md): `GEODISK.SYS` installs a D9:
+RAM disk on the paged RAM for MyDOS 4.5x (one 256-byte sector per bank):
+it copies the OS to the RAM under the ROM and hooks the SIO vector.  Tested
+on py65 with a fake OS (`make test`), still to be tried on a real 130XE.
+
 ## Hardware Setup
 Refer to the following documents for detailed pinout:
 - [General Pin Mapping](PIN_MAPPING.md) (NodeMCU DevKit V1)

@@ -1,0 +1,6 @@
+GEODISK.SYS
+res.inc
+*.bin
+*.o
+*.lst
+*.map
