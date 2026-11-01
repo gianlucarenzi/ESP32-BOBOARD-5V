@@ -475,25 +475,27 @@ sequenceDiagram
 
 ```mermaid
 gantt
-    title Timing Diagram - 6502 Bus Cycle
-    dateFormat X
+    title Atari bus cycle, nodemcu-32s firmware (ns, NTSC 559 ns)
+    dateFormat x
     axisFormat %L
-    
+    tickInterval 50millisecond
+
     section PHI2
-    High Phase    :active, phi2h, 0, 500
-    Low Phase     :phi2l, 500, 1000
-    
-    section Address Bus
-    Address Valid :addr, 0, 900
-    Address Hold  :addrh, 900, 1000
-    
-    section Data Bus (Read)
-    Data Setup    :data, 100, 400
-    Data Valid    :active, datav, 400, 800
-    Data Hold     :datah, 800, 900
-    
-    section R/W Signal
-    Read Cycle    :active, rw, 0, 1000
+    Low (PHI1)                      :p1, 0, 280
+    High (PHI2)                     :active, p2, 280, 559
+
+    section 6502 / MMU
+    A0-A7, R/W valid (t_ADS)        :a1, 140, 559
+    ~D1XX / ~CCTL valid             :a2, 170, 559
+
+    section ESP32
+    Sample address and selects      :crit, e1, 200, 215
+    Decode, byte into GPIO.out      :e2, 215, 320
+    Read - D0-D7 driven             :active, e3, 360, 559
+    Write - data sampled            :crit, e4, 400, 410
+
+    section 6502 reads
+    Data stable (t_DSU 100 ns)      :d1, 459, 559
 ```
 
 ### Monitor Performance
