@@ -1,12 +1,12 @@
 # Atari PBI ROM Emulator & VERA Bus Monitor
 
-High-performance ESP32-based firmware that emulates the Atari 8-bit Parallel Bus Interface (PBI) ROM slot ($D800-$DFFF) and logs VERA video-card register accesses via a FreeRTOS queue.
+High-performance ESP32-based firmware that emulates the Atari 8-bit Parallel Bus Interface (PBI) ROM slot ($D800-$DFFF) and logs VERA video-card register accesses via a lock-free ring buffer.
 
 ## Features
 - **Bus Modes:**
-    - **PBI Mode (Default):** Full Atari PBI device emulation. Serves a 2 KB ROM at $D800-$DFFF (A0-A10, no aliasing). Asserts MPD on ROMSEL; asserts EXTSEL when the PBI latch is active. Latch enabled by writing $80 to $D1FF, disabled by writing $00.
-    - **CCTL Mode:** Cartridge Control mode. VCS latch always active; MPD, EXTSEL, and latch control ($D1FF) are not used.
-- **VERA Register Logging:** Every access to $D100-$D1FE is captured by Core 1 and forwarded via a 64-entry FreeRTOS queue to Core 0 for Serial output. Each event carries a microsecond-precision timestamp (`esp_timer_get_time()`).
+    - **PBI Mode (Default):** Full Atari PBI device emulation. Serves a 2 KB ROM at $D800-$DFFF (A0-A10, no aliasing). Like every PBI device, it answers only when its latch is active: then it asserts MPD and serves the ROM on ROMSEL, and asserts EXTSEL on $D1XX. Latch enabled by writing $80 to $D1FF, disabled by writing $00.
+    - **CCTL Mode:** Cartridge Control mode. Same rule as PBI, with the latch at $D5FF instead of $D1FF: write $80 to $D5FF to enable, any other value to disable. Only with the latch active it asserts MPD and serves the ROM on ROMSEL, and asserts EXTSEL on the CCTL window ($D5XX).
+- **VERA Register Logging:** Every access to $D100-$D1FE is captured by Core 1 and forwarded via a 1024-entry lock-free ring buffer to `LogTask` on Core 0, which owns Serial. Each event carries a timestamp from the Core 1 cycle counter (CCOUNT extended to 64 bit), printed in microseconds since the bus loop started. Write data is sampled `BUS_WR_SAMPLE_NS` (default 120 ns) after PHI2 rises; VERA read data just before PHI2 falls. Events are dropped and counted when the ring is full.
 - **Serial Output Format:**
     ```
     [    0.001234] [VCS ] Latch ENABLED  ($80 written to $D1FF)
@@ -15,7 +15,7 @@ High-performance ESP32-based firmware that emulates the Atari 8-bit Parallel Bus
     [    0.002347] [D109 - VERA_FX_CTRL         ] W $20
     ```
   Registers $09-$0C are muxed by DCSEL (bits `[2:1]` of `VERA_CTRL`); the logger tracks the last write to `$D105` to resolve the correct name automatically.
-- **Fast Response:** IRAM-resident `MonitorTask` on Core 1 with direct GPIO register access (`GPIO.in`, `GPIO.out_w1ts/c`) for < 50 ns bus latency.
+- **Fast Response:** IRAM-resident `MonitorTask` owns Core 1 (interrupts masked, interrupt watchdog disabled, no FreeRTOS calls). The critical path from the PHI2 rising edge to the data bus drive is inline assembly: table-driven A0-A10 decode, precomputed `GPIO.out` words for the ROM, one `GPIO.out` store for D0-D7 + MPD + EXTSEL, no `memw`. All hot-loop data is in DRAM (ESP32 IRAM is not byte-addressable). Ported from Vera-Module-RBL-XE.
 - **Hardware Target:** NodeMCU DevKit V1 (ESP32-WROOM).
 
 ## 6502 ROM Build Pipeline
@@ -29,7 +29,7 @@ The PBI ROM served at $D800-$DFFF is a real 2 KB 6502 binary assembled before th
 | `6502/pbi-driver.ld` | Linker script: places CODE/RODATA at $D800, size 2 KB |
 | `6502/Makefile` | Assembles with `ca65`, links with `ld65`, emits `pbi-driver.h` via `hexdump` |
 | `pre_build.py` | PlatformIO `pre:` hook — runs `make -C 6502/` before any C++ source is compiled |
-| `include/pbi-driver.h` | Auto-generated C header: `IRAM_ATTR uint8_t pbi_driver[2048]` |
+| `include/pbi-driver.h` | Auto-generated C header: `const uint8_t pbi_driver[2048]` (flash, copied to DRAM at boot) |
 
 **Toolchain requirement:** `cc65` suite (`ca65`, `ld65`) must be on `$PATH`.
 

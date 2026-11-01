@@ -45,14 +45,16 @@ $(BIN_FILE): $(OBJ_FILE) $(LINK_CFG)
 ## Conversione in Array C
 
 # Regola per convertire il binario in un array C in un file .h
-$(C_ARRAY_FILE): $(BIN_FILE)
+$(C_ARRAY_FILE): $(BIN_FILE) Makefile
 	@echo "/* Automatically generated! Do not edit! */" > $@
 	@echo "#ifndef PBI_DRIVER_BIN_ARRAY_H" >> $@
 	@echo "#define PBI_DRIVER_BIN_ARRAY_H" >> $@
 	@echo "" >> $@
 	@echo "#include <stdint.h>" >> $@
 	@echo "" >> $@
-	@echo "const uint8_t IRAM_ATTR pbi_driver[] =" >> $@
+# Flash rodata: setup() copies it once into pbi_rom[] (DRAM).  Not IRAM_ATTR:
+# IRAM on the ESP32 is not byte-addressable (LoadStoreError on 8-bit loads).
+	@echo "const uint8_t pbi_driver[] =" >> $@
 	@echo "{" >> $@
 	hexdump -v -e '16/1 "0x%02x," "\n"' $<  >> $@
 	@echo "};" >> $@

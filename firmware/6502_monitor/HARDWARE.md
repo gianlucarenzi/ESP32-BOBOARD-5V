@@ -6,9 +6,9 @@ The ESP32 interfaces the Atari 800XL/130XE PBI (Parallel Bus Interface) to:
 
 - serve a 2 KB ROM image at **$D800–$DFFF** (A0-A10 fully decoded, no aliasing)
 - respond to register reads/writes at **$D100–$D1FF** ($D1XX page)
-- log every VERA register access (**$D100–$D1FE**) with microsecond timestamps via FreeRTOS queue
+- log every VERA register access (**$D100–$D1FE**) with microsecond timestamps via a lock-free ring buffer (Core 1 → Core 0)
 - assert **EXTSEL** to disable Atari internal memory when the PBI latch is active
-- assert **MPD** (Math Pack Disable) whenever the ROMSEL window is selected
+- assert **MPD** (Math Pack Disable) and serve the ROM in the ROMSEL window only when the PBI latch is active
 
 All 5 V Atari signals pass through **TXS0108E** bidirectional level translators
 before reaching the 3.3 V ESP32 GPIOs.  The $D800–$DFFF chip-select is
