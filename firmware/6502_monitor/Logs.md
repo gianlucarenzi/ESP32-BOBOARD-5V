@@ -1,12 +1,17 @@
 # Project Logs & Architectural Decisions
 
-## 2026-11-01: Bus Loop Optimizations from RBL-XE, PBI Latch Rule, Serial Log
+## 2026-11-01: ROM-less Banked RAM Peripheral, Bus Loop from RBL-XE, Serial Log, Bootstrap
+
+### Documentation
+- **PIN-MAPPING** (`PIN_MAPPING.md` / `.tex` / `.pdf` here, `PIN-MAPPING.md` in the board root): pins unchanged; the notes now list the window map (RAM `$xx00-$xx7F`, bank count `$xxFB-$xxFC` R, bank register `$xxFD-$xxFE` R/W, latch `$xxFF` W bit 7) and the reads that drive D0-D7 (RAM, bank count, bank register).  PDF kept on one page (vertical margin 0.5 in, less space under the title).
+- **READMEs** (board root IT / EN, firmware, `atari-test`, `HARDWARE.md`): register map with the 16-bit bank count and bank register, heap banks with the per-window estimate and the boot banner (counts as placeholders until measured).
+
 
 ### 16-bit Bank Register, Banks from the Heap
 - **Map**: `$xxFD-$xxFE` bank register (16 bit, little-endian: `$xxFD` keeps its meaning), `$xxFB-$xxFC` number of banks of the window (read-only, writes ignored), `$xx80-$xxFA` reserved.  A bank at or beyond the count selects no RAM: not driven, writes ignored.
 - **Allocation**: the static 64 KB array is gone.  At boot `alloc_banks()` takes every byte-addressable DRAM heap block (`MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL`, largest first, at least 4 KB) until `BANK_HEAP_RESERVE` (24 KB) is left for the system, carves 128-byte banks and lists them in a bank → pointer table; the banks are split evenly between the two windows.  Estimate from the linker symbols: ~250 KB of heap minus the 24 KB reserve and the table (4 bytes per bank) → ~100-120 KB per window, to be confirmed on the board; the exact count, heap blocks used and heap left are printed in the banner (LogTask waits for the allocation).  Static DRAM use: 39 KB.
 - **Bus loop**: `WinState` grows to 12 bytes (RAM pointer of the current bank, latch, count / bank registers at +8).  PHI1 assembly: RAM pointer NULL → not driven (+1 instruction); `$FB-$FE` read through one index into the registers.  29 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM read.  A bank register write recomputes the pointer (`ws_map()`, inlined).
-- **Test program**: COUNT and LIMIT tests added, 16-bit BANK REG (low byte $00-$FF with high byte $00 / $55 / $AA / $FF), the MARCH covers every bank with the bank number in bytes 0-1 of each bank.  Simulated with 300 banks per window: passes, and ten injected faults (now also bank high byte ignored, banks beyond the count wrapping onto existing ones, bank count writable) are all detected.  Run time on the Atari: a few seconds per 64 KB.
+- **Test program**: COUNT and LIMIT tests added, 16-bit BANK REG (low byte $00-$FF with high byte $00 / $55 / $AA / $FF), the MARCH covers every bank with the bank number in bytes 0-1 of each bank.  Simulated with 300 banks per window: passes, and ten injected faults (now also bank high byte ignored, banks beyond the count wrapping onto existing ones, bank count writable) are all detected.  With `count_writable` the COUNT test fails at once (`ERR D1 B=0000 O=FB E=2C G=D3`); the run then stops at the simulator's 100 M instruction limit, because the corrupted count ($FED3) makes the later passes walk ~65000 banks.  Run time on the Atari: a few seconds per 64 KB.
 
 ### Atari Test Program, DRAM_ATTR on Large Arrays
 - **`atari-test/banked_ram_test.s`** (ca65, `cl65 -t atari -C atari-asm.cfg`, 825-byte XEX at $2E00): per window BANK REG (write / read back $00-$FF), PROTECT (deselect with $7F, writes ignored, reselect with $81), MARCH (all 256 banks with `offset EOR bank EOR key`, then the complement); then D1 KEEP (pattern still there after the $D5xx tests).  Errors counted on 24 bits, first four per test printed as `ERR D1 B=bb O=oo E=ee G=gg`.  `TEST_CCTL = 0` skips $D5xx (cartridges that bank-switch through CCTL).
