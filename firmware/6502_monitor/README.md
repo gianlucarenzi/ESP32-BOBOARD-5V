@@ -71,3 +71,20 @@ Build and flash:
 pio run -e nodemcu-32s --target upload        # PBI mode
 pio run -e nodemcu-32s-cctl --target upload   # CCTL mode
 ```
+
+**Programming rule:** the ESP32 module is always programmed on its own,
+disconnected from the Atari and connected only to the PC (serial bootloader).
+
+**VDD_SDIO efuse:** GPIO12 carries A8, and at every chip reset the ESP32 ROM
+samples it to select the flash voltage (HIGH = 1.8 V: the WROOM-32 flash does
+not boot).  Before every upload, `efuse_vdd_sdio.py` reads the efuses and, if
+they are still blank, burns VDD_SDIO to a fixed 3.3 V
+(`espefuse.py set_flash_voltage 3.3V`, **irreversible**), so that GPIO12 is
+ignored from then on.  Already set: nothing to do.  Any other combination:
+the upload stops without burning anything.  Controlled by
+`custom_efuse_vdd_sdio = 3.3V` in `platformio.ini` (empty value = no check).
+On first use the script creates `.pio/espefuse-venv` with the espefuse
+dependencies (needs network access once).  See [HARDWARE.md](HARDWARE.md#3-esp32-strapping-pins).
+
+**Serial monitor:** `monitor_rts = 0` and `monitor_dtr = 0`, so opening the
+monitor does not reset the ESP32 through the NodeMCU auto-reset circuit.

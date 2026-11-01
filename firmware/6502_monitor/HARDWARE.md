@@ -51,3 +51,35 @@ _________|           |___________
          |           |
          |<- 279 ns ->|
 ```
+
+---
+
+## 3. ESP32 Strapping Pins
+
+The ESP32 ROM samples the strapping pins at every chip reset (power-on, EN,
+brown-out, watchdog), before any firmware runs.  On this board the TXS0108E
+translators are always enabled (`TXS_EN` pulled up by R1/R3/R4, SW1 only
+disables them by hand), so at reset the strapping pins see the Atari bus.
+The module is always programmed on its own, connected only to the PC.
+
+| GPIO | Signal | Strapping function | On the Atari bus |
+|---|---|---|---|
+| 12 (MTDI) | A8 | VDD_SDIO: HIGH = 1.8 V flash | **Fatal**: A8 is random at reset (the 6502 keeps cycling), and the TXS0108E pull-ups hold it HIGH on an idle bus.  The WROOM-32 flash needs 3.3 V: with 1.8 V the ESP32 does not boot.  Fixed by the VDD_SDIO efuses (below). |
+| 0 | MPD | Boot mode: LOW = download | Not routed on the 30-pin DevKit headers: the NodeMCU pull-up keeps it HIGH, SPI boot. |
+| 2 | PHI2 | Download mode needs it LOW | Ignored while GPIO0 is HIGH. |
+| 15 (MTDO) | R/W | LOW = no ROM boot messages | Harmless. |
+| 5 | D1 | SDIO slave timing | Harmless (SDIO unused). |
+
+**VDD_SDIO efuses.**  `XPD_SDIO_FORCE = 1` (ignore GPIO12),
+`XPD_SDIO_REG = 1` (regulator on), `XPD_SDIO_TIEH = 1` (3.3 V), i.e.
+`espefuse.py set_flash_voltage 3.3V`.  Irreversible, and the right setting for
+the WROOM-32.  `efuse_vdd_sdio.py` checks them before every upload and burns
+them when they are blank.
+
+**Serial monitor.**  On the NodeMCU, RTS and DTR drive EN and GPIO0 through
+the auto-reset transistors: `monitor_rts = 0` / `monitor_dtr = 0` keep the
+monitor from resetting the ESP32 while it sits on the Atari bus.
+
+**Output glitch.**  After reset the `GPIO.out` bits are 0: `setup()` writes
+MPD / EXTSEL HIGH before making them outputs, so they are never driven LOW
+during the start-up.

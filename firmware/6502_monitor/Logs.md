@@ -24,6 +24,13 @@ Commit `86cd2a3`:
 - **Single writer**: `setup()` no longer prints. `LogTask` prints the banner, the bus events, the dropped-event count and the bus loop start failure (flag set by `setup()`) in one sequence. ESP-IDF system logs (level ERROR, panic only) bypass the Arduino mutex.
 - **Baud rate**: `LOG_BAUD`, default 115200. A higher value (e.g. 921600) only drops fewer events during VERA bursts (~160 lines/s at 115200, ~1280 at 921600) and needs a matching `monitor_speed`; it does not affect ordering.
 
+
+### Bootstrap: VDD_SDIO Efuse, Monitor RTS/DTR, Output Glitch
+Programming rule: the ESP32 module is always programmed on its own, disconnected from the Atari and connected only to the PC (serial bootloader).  With it, GPIO2 (PHI2) and GPIO0 no longer matter for the download mode.  Strapping analysis for a reset while on the Atari bus (details in HARDWARE.md §3):
+- **GPIO12 = A8 (MTDI)** is sampled at every chip reset and selects the flash voltage: HIGH = 1.8 V, the WROOM-32 flash does not boot.  A8 is random at reset and the TXS0108E pull-ups hold it HIGH on an idle bus.  **`efuse_vdd_sdio.py`** (PlatformIO `post:` script, runs before every upload) reads `XPD_SDIO_FORCE/REG/TIEH`: all set → nothing to do; all blank → `espefuse.py set_flash_voltage 3.3V` (irreversible) and read back; any other state → upload stopped, nothing burned.  `custom_efuse_vdd_sdio = 3.3V` in `platformio.ini` enables it.  espefuse needs `ecdsa`, `bitstring`, `reedsolo`, `cryptography`, missing from the PlatformIO Python: a private virtualenv is created in `.pio/espefuse-venv` on first use.  Note: espefuse reports `XPD_SDIO_TIEH` as `"1.8V"` / `"3.3V"`, not as a boolean.  Tested with virtual efuses (`--virt`: blank, already set, partial) and with an unreachable port (upload stopped before writing the flash); not yet on a real module.
+- **Serial monitor**: `monitor_rts = 0` / `monitor_dtr = 0`, so opening the monitor does not reset the ESP32 through the NodeMCU auto-reset circuit while it sits on the Atari bus.
+- **Output glitch**: `setup()` wrote MPD / EXTSEL HIGH after `pinMode(OUTPUT)`, driving them LOW for a few µs (the `GPIO.out` bits are 0 after reset).  The level is now written first; `gpio_set_level()` works while the pin is still an input.
+- **Open**: MPD (GPIO0) and EXTSEL (GPIO3) are not routed to J3 on this board (GPIO0 is not on the 30-pin headers, GPIO3 only reaches J4 and the USB bridge TX), unlike the board README, which assigns them to the third TXS0108E.
 ---
 
 ## 2026-06-12: Firmware Simplification, Full 2 KB Decode, VERA Logging

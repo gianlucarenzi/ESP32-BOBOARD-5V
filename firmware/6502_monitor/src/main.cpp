@@ -685,11 +685,14 @@ void setup()
     memcpy(pbi_rom, pbi_driver, sizeof(pbi_rom));
     build_tables();
 
-    // Control outputs: inactive (HIGH)
-    pinMode(PIN_MPD,    OUTPUT);
+    // Control outputs: inactive (HIGH).  The level is written before the pin
+    // becomes an output: the GPIO.out bit is 0 after reset, so pinMode()
+    // first would drive MPD / EXTSEL LOW for a few microseconds.
+    // (gpio_set_level() writes GPIO.out even while the pin is an input.)
     digitalWrite(PIN_MPD,    HIGH);
-    pinMode(PIN_EXTSEL, OUTPUT);
     digitalWrite(PIN_EXTSEL, HIGH);
+    pinMode(PIN_MPD,    OUTPUT);
+    pinMode(PIN_EXTSEL, OUTPUT);
 
     // Data bus: high-impedance inputs initially
     for (int i = 0; i < 8; i++) pinMode(DBUS_PINS[i], INPUT);
