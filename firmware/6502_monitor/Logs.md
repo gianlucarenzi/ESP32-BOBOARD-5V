@@ -1,6 +1,12 @@
 # Project Logs & Architectural Decisions
 
-## 2026-11-01: ROM-less Banked RAM (GeoRAM Style), C64 GeoRAM, Bus Loop from RBL-XE, Serial Log, Bootstrap
+## 2026-11-01: ROM-less Banked RAM (GeoRAM Style), C64 GeoRAM and Test, Bus Loop from RBL-XE, Serial Log, Bootstrap
+
+### C64 GeoRAM Test Program
+- **`c64-test/georam_test.s`** (ca65, `cl65 -t c64 -C c64-asm.cfg -u __EXEHDR__`, BASIC stub `SYS 2061`, output through CHROUT): presence check (`$DE01` keeps `$A5` / `$5A`: the C64 open bus can read `$00`, which a size-only check would take for 256 blocks), SIZE (blocks 255..0 marked with their number, first block not reading itself = size; `EXPECT_BLOCKS` = 16), ALIAS (block = size is block 0), PAGE REG (only bits 0-5 count), MARCH over every page of every block with all 256 offsets, then the complement.  Registers are write-only: the program keeps copies.  About 30 s for 256 KB on the C64; it overwrites the whole GeoRAM.
+- **Strings in lower case**: with `-t c64` ca65 maps `'A'` to PETSCII `$C1`, a graphic character in the default upper case / graphics set; lower case source maps to `$41-$5A`, shown as upper case.
+- **Host simulation** (`sim_georam.py`, py65, CHROUT trapped, start address from the BASIC stub): correct model ALL TESTS PASSED; faults: page / block register ignored, page register on 8 bits, no aliasing beyond the size, D3 stuck, A6 not decoded, offset `$FF` not stored, a 128 KB unit, two blocks sharing the RAM, no GeoRAM: all detected (SIZE for register / mask / size faults, ALIAS for no aliasing, PAGE REG for the page register, MARCH for data and address lines; no GeoRAM and D3 stuck stop at the presence check with `NO GEORAM`, since `$A5` reads back as `$AD`).
+- **Atari**: no new program; `atari-test/banked_ram_test.xex` already covers the GeoRAM-style mode of the Atari build.
 
 ### C64 GeoRAM Checked Against Vera-Module-RBL-C64
 - **Same behaviour**: 256 KB, `$DE00-$DEFF` window, `$DFFE` page (`& $3F`), `$DFFF` block (`& $0F`, block 16 aliases block 0), write-only registers not driven on reads, decoded only at `$DFFE` / `$DFFF` (no `$DF80-$DFFD` mirrors), always enabled, zeroed at power-up and kept across a C64 reset, write sampled 300 ns after PHI2 rises.
