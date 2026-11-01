@@ -64,6 +64,12 @@ lock-free ring buffer.
   after PHI2 rises.  Optimizations ported from Vera-Module-RBL-XE.
 - **Hardware Target:** NodeMCU DevKit V1 (ESP32-WROOM, 30 pins).
 
+## Atari Test Program
+[`atari-test/`](atari-test/README.md): `banked_ram_test.xex` (cc65) checks
+bank register, deselect protection, a march over all 256 banks and window
+independence in `$D1xx` and `$D5xx`.  `make sim` / `make simall` run it on
+py65 against a model of the device, with injected faults.
+
 ## Hardware Setup
 Refer to the following documents for detailed pinout:
 - [General Pin Mapping](PIN_MAPPING.md) (NodeMCU DevKit V1)

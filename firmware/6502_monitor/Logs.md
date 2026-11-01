@@ -2,6 +2,12 @@
 
 ## 2026-11-01: Bus Loop Optimizations from RBL-XE, PBI Latch Rule, Serial Log
 
+### Atari Test Program, DRAM_ATTR on Large Arrays
+- **`atari-test/banked_ram_test.s`** (ca65, `cl65 -t atari -C atari-asm.cfg`, 825-byte XEX at $2E00): per window BANK REG (write / read back $00-$FF), PROTECT (deselect with $7F, writes ignored, reselect with $81), MARCH (all 256 banks with `offset EOR bank EOR key`, then the complement); then D1 KEEP (pattern still there after the $D5xx tests).  Errors counted on 24 bits, first four per test printed as `ERR D1 B=bb O=oo E=ee G=gg`.  `TEST_CCTL = 0` skips $D5xx (cartridges that bank-switch through CCTL).
+- **Host simulation** (`sim_banked_ram.py`, py65): the XEX runs against a model of the device with CIO trapped.  Correct model: ALL TESTS PASSED in 1.67 M instructions (~1 s on the Atari).  Seven injected faults (bank register ignored, latch ignored, D3 stuck, A6 not decoded, windows sharing RAM, banks aliased on 7 bits, writes while deselected) are all detected.  The first version printed a blank line between errors, used the 8 detailed lines up in the first failing test and wrapped its 16-bit error count past 65535: all fixed.
+- **`DRAM_ATTR` removed from the large arrays**: it placed the zeroed `bank_ram` (64 KB) and `log_ring` (16 KB) in `.data`, i.e. in the flash image and in the boot-time copy.  Plain globals are already in DRAM on the ESP32: firmware.bin 351 KB → 268 KB.
+- **RAM available for the 6502** (from the linker symbols, to be measured at runtime): 64 KB used now; ~190 KB more of byte-addressable DRAM heap after boot (BT memory released, task stacks subtracted), in several blocks (largest ~112 KB) → ~250 KB in total with a per-bank pointer table and a 16-bit bank register; ~70 KB of IRAM on top, 32-bit access only.  No PSRAM on the WROOM-32.
+
 ### Banked RAM in the $D1xx / $D5xx Windows (supersedes the register file below)
 The ROM-less peripheral becomes a small banked RAM expansion.  Each window ($D100-$D1FF, $D500-$D5FF) is independent, with its own latch, bank register and RAM:
 - **Map**: `$xx00-$xx7F` RAM window (128 bytes of the current bank), `$xxFD` bank register (R/W, 256 banks), `$xxFF` select latch (W, bit 7 = device ID $80, never driven on reads), `$xx80-$xxFC` and `$xxFE` reserved (never driven, writes ignored).  RAM and bank register respond only while the window is selected.

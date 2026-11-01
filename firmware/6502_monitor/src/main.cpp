@@ -38,7 +38,8 @@
  *   on the rising edge one store turns D0-D7 on.  If a select line shows up
  *   only on the rising edge (a PHI2-qualified decode), the byte is driven
  *   late from that sample.
- * - Hot-loop data in DRAM (IRAM is not byte-addressable on the ESP32); GPIO
+ * - Hot-loop data in DRAM, as plain globals (IRAM is not byte-addressable on
+ *   the ESP32, so nothing the loop reads may be IRAM_ATTR); GPIO
  *   accesses in inline assembly, without the memw the compiler puts around
  *   volatiles.
  * - Write data sampled at a fixed time after PHI2 rises (CCOUNT).
@@ -168,8 +169,10 @@ static_assert((RAM_WIN_SIZE & (RAM_WIN_SIZE - 1u)) == 0 && RAM_WIN_SIZE <= BANK_
 static const uint8_t WIN_PAGE[WINDOWS] = {0xD1, 0xD5};
 
 // Banked RAM, one area per window (2 x 32 KB), written only by the Atari.
-// Plain .bss in DRAM: zeroed at start-up.
-static DRAM_ATTR uint8_t bank_ram[WINDOWS][BANKS][RAM_WIN_SIZE];
+// Plain .bss in DRAM, zeroed at start-up.  On the ESP32 every global already
+// lives in DRAM (byte-addressable): no DRAM_ATTR, which would move zeroed
+// arrays into .data, i.e. into the flash image and the boot-time copy.
+static uint8_t bank_ram[WINDOWS][BANKS][RAM_WIN_SIZE];
 
 // Window state, read by the bus loop assembly: field offsets are fixed.
 typedef struct {
@@ -186,10 +189,10 @@ static_assert(WIN_D1XX == 0 && WIN_CCTL == 1, "window index used by the bus loop
 static_assert(RAM_WIN_SIZE == 128u && BANK_OFFSET == 0xFDu,
               "bgeui 128 / movi 0xFD in the bus loop assembly");
 
-static DRAM_ATTR WinState win_state[WINDOWS];
+static WinState win_state[WINDOWS];
 
 // GPIO.out word (D0-D7) for each byte value.
-static DRAM_ATTR uint32_t drive_lut[256];
+static uint32_t drive_lut[256];
 
 // ---------------------------------------------------------------------------
 // Log Ring (Core 1 bus loop → Core 0 LogTask)
@@ -220,10 +223,10 @@ typedef struct {
     uint8_t  bank;    // bank register of the window at the time of the access
 } LogEvt;
 
-static DRAM_ATTR LogEvt   log_ring[LOG_RING_SIZE];
-static DRAM_ATTR uint32_t log_head    = 0;  // written by the bus loop only
-static DRAM_ATTR uint32_t log_tail    = 0;  // written by LogTask only
-static DRAM_ATTR uint32_t log_dropped = 0;  // written by the bus loop only
+static LogEvt   log_ring[LOG_RING_SIZE];
+static uint32_t log_head    = 0;  // written by the bus loop only
+static uint32_t log_tail    = 0;  // written by LogTask only
+static uint32_t log_dropped = 0;  // written by the bus loop only
 
 // ---------------------------------------------------------------------------
 // Decoding Tables & Helpers
@@ -231,9 +234,9 @@ static DRAM_ATTR uint32_t log_dropped = 0;  // written by the bus loop only
 #define BUS_INLINE static inline __attribute__((always_inline))
 
 // A0-A5 from GPIO.in1 bits 0-7 (GPIO 32-39).
-static DRAM_ATTR uint8_t addr_lut_hi[256];
+static uint8_t addr_lut_hi[256];
 // A6, A7 from GPIO.in bits 21-27 (GPIO 21, 27); ~D1XX / ~CCTL ignored.
-static DRAM_ATTR uint8_t addr_lut_lo[128];
+static uint8_t addr_lut_lo[128];
 
 // D0-D7 on GPIO 4,5 | 13,14 | 16-19.
 static_assert(PIN_D0 == 4 && PIN_D1 == 5 && PIN_D2 == 13 && PIN_D3 == 14 &&
