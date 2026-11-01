@@ -1,5 +1,25 @@
 # Project Logs & Architectural Decisions - SIDBOARD
 
+
+## 2026-11-01: Bus Loop from 6502_monitor, CCTL and PBI Builds
+
+### Builds
+- **`sid-cctl`**: SID at `$D500-$D51E` on `~CCTL`, always on: no latch, no configuration (the old `$D5FF` bit 0 latch is gone; a write there is ignored).
+- **`sid-pbi`**: SID at `$D100-$D11E` on `~D1XX`, PBI device ID `$80`, select latch `$D1FF` (bit 7, never driven).  Deselecting only removes the SID from the bus: the registers stay and the voices keep playing (choice asked; the OS PBI scan writes `$80` then `$00` at every RESET).
+- **`sid-demo`**: `sid-cctl` plus the built-in Commando tune.  Separate builds rather than both pages at once (choice asked): with `sid-pbi` the SID never touches `$D5xx`, so CCTL cartridges keep working.
+
+### Bus loop ported from 6502_monitor
+- Core 1 runs only MonitorTask: interrupts masked, interrupt watchdog (MWDT1) off, no FreeRTOS call.  Address, R/W and select decoded during PHI1, `BUS_ADDR_SETTLE_NS` = 200 ns after PHI2 falls, in inline assembly: a register read puts the byte into `GPIO.out` with the outputs off, the PHI2 rising edge only needs one store to `enable_w1ts`; late-select fallback from the rising-edge sample.  Write data sampled `BUS_WR_SAMPLE_NS` = 120 ns after the rise (was: after the PHI2 falling edge had been seen, at the very end of the 6502 data hold time).  The predicted falling edge (`BUS_PHI2_HIGH_MAX_NS`) keeps the settle time when the edge is seen late.
+- Register writes go straight into the cSIDLight array (`regs()`, new accessor); `process()` moved from `loop()` (Core 1, now owned by the bus loop) to SidTask on Core 0, every 1 ms.
+- Log: the FreeRTOS queues (`xQueueSend` in the hot path) replaced by the lock-free 1024-entry ring; LogTask on Core 0 is the only Serial writer, one `Serial.write()` per line; timestamps from CCOUNT.
+- Bootstrap as on 6502_monitor: `efuse_vdd_sdio.py` (VDD_SDIO efuse check / burn before upload), `monitor_rts = 0`, `monitor_dtr = 0`; nothing is driven at start-up.
+
+### Pins
+- Same as 6502_monitor and the board netlist: A0-A7 (A5 GPIO33, A6 GPIO21, A7 GPIO27 added), `~D1XX` GPIO22 (J3 11), `~CCTL` GPIO23 (J3 12).  The old firmware read CCTL on GPIO22 with A0-A4 only: the CCTL wire moves to J3 pin 12.
+- Register names in the log fixed: `$19` POTX, `$1A` POTY, `$1B` OSC3, `$1C` ENV3 (were OSC3 / ENV3 at `$19` / `$1A`).
+- The `I:` players in `examples/` need the old PBI ROM handler, which this board cannot load (no MPD / EXTSEL): to be adapted to direct register writes.
+- Built for all three environments; not yet tried on the Atari.
+
 ## 2026-05-06 (rev 2): cSIDLight — DAC nativo, nessuna dipendenza esterna
 
 ### Motivazione

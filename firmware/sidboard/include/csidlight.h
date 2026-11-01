@@ -5,7 +5,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 
-// SID register offsets (relative to $D500 base)
+// SID register offsets (relative to the page base: $D500 CCTL, $D100 PBI)
 #define SID_V1_FREQ_LO 0x00
 #define SID_V1_FREQ_HI 0x01
 #define SID_V1_PW_LO   0x02
@@ -32,7 +32,8 @@
 #define SID_RES_FILT   0x17
 #define SID_MODE_VOL   0x18
 
-// Registers 0x00-0x1E are SID; 0x1F is the latch control ($D5FF decoded).
+// Registers 0x00-0x1E are stored (0x00-0x1C on a real SID: 0x19 POTX,
+// 0x1A POTY, 0x1B OSC3, 0x1C ENV3; 0x1D-0x1E unused).
 #define SID_NUM_REGS   0x1F
 
 // Voice control register bits
@@ -57,8 +58,8 @@
 /**
  * cSIDLight - Lightweight SID 6581/8580 emulator.
  *
- * Registers 0x00-0x1E mapped at $D500-$D51E via CCTL/SEL_N.
- * Register 0x1F ($D5FF decoded) is the latch control — not part of SID.
+ * Registers 0x00-0x1E mapped at $D500-$D51E (env sid-cctl, ~CCTL) or
+ * $D100-$D11E (env sid-pbi, ~D1XX, selected through $D1FF).
  * Audio output via ESP32 DAC1 on GPIO 25 at 22050 Hz.
  *
  * Bus-timing safety:
@@ -127,8 +128,14 @@ class cSIDLight
     }
 
     /**
+     * Register array, read and written directly by the bus loop on Core 1
+     * (byte loads / stores, as write() and read()).
+     */
+    volatile uint8_t *regs() { return _regs; }
+
+    /**
      * Scan _regs[] for changes and update synthesis parameters.
-     * O(SID_NUM_REGS) byte comparisons — call from loop() (Core 0).
+     * O(SID_NUM_REGS) byte comparisons — call from SidTask (Core 0).
      */
     void process()
     {

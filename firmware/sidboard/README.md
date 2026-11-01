@@ -1,175 +1,130 @@
-# Sidboard — ESP32 CCTL/SID Firmware for Atari 8-bit
+# Sidboard — SID Sound for the Atari 8-bit (ESP32-BOBOARD-5V)
 
-Firmware for an **ESP32 (NodeMCU-32S)** expansion board connected to an Atari 8-bit computer via the **CCTL (Cartridge Control Line)**. It provides:
+Firmware for the **ESP32-BOBOARD-5V** (NodeMCU-32S) on the Atari 8-bit bus:
 
-- **SID 6581/8580 sound emulation** (3 square-wave voices, 22050 Hz, via ESP32 DAC1 on GPIO 25)
-- **Real-time bus monitoring** synchronized to the 6502 PHI2 clock
-- **Timestamped serial log** of every register access and latch event
-- **Zero FreeRTOS overhead** in the hot bus-sampling path
-
----
-
-## Table of Contents
-
-1. [Hardware Requirements](#hardware-requirements)
-2. [Pin Mapping](#pin-mapping)
-3. [Memory Map](#memory-map)
-4. [Architecture](#architecture)
-5. [SID Register Map](#sid-register-map)
-6. [cSIDLight Audio Engine](#csidlight-audio-engine)
-7. [Audio Circuit](#audio-circuit)
-8. [Build and Flash](#build-and-flash)
-9. [Usage from Atari Side](#usage-from-atari-side)
-10. [File Structure](#file-structure)
+- **SID 6581/8580 sound** (cSIDLight: 3 square-wave voices, frequency, gate,
+  master volume; ESP32 DAC1 on GPIO 25, 22.2 kHz)
+- two builds: **CCTL** (`$D500`, always on) or **PBI device** (`$D100`,
+  select latch `$D1FF`)
+- the bus loop of the [6502_monitor](../6502_monitor/README.md) firmware:
+  PHI1 decode in assembly on Core 1, interrupts masked, lock-free log
+- timestamped serial log of every access to the SID page
 
 ---
 
-## Hardware Requirements
+## Builds
 
-| Component | Detail |
-|-----------|--------|
-| MCU | ESP32 (NodeMCU-32S) @ 240 MHz |
-| Atari interface | Cartridge slot — CCTL line ($D5xx), 5-bit address bus, 8-bit data bus |
-| Level translator | TXS0108 — 3.3 V ↔ 5 V for data and address lines |
-| Audio output | GPIO 25 (DAC1) → audio mixer via RC filter |
+| Environment | SID registers | Select | Wiring |
+|---|---|---|---|
+| `sid-cctl` | `$D500-$D51E` | always on, no latch, no configuration | Atari `~CCTL` → J3 pin 12 |
+| `sid-pbi` | `$D100-$D11E` | PBI device ID `$80`: write `$80` to `$D1FF` to select, `$00` to deselect | `~D1XX` → J3 pin 11 |
+| `sid-demo` | as `sid-cctl` | plus a built-in tune (`AUDIO_DEMO`, Commando at 50 Hz) | as `sid-cctl` |
+
+Only A0-A7 are sampled: the page comes from the select line.  Offsets
+`$1F-$FE` of the page are not decoded (never driven, writes ignored).
+Reads of `$00-$1E` return the stored register byte.
+
+**`sid-pbi`:** `$D1FF` is never driven (it is the PBI interrupt status read
+by the OS).  Deselected, the SID neither answers nor stores writes, but it
+**keeps playing**: deselecting only removes it from the bus.  The OS PBI
+scan at power-up and RESET writes `$80` then `$00` to `$D1FF`, so the SID
+ends deselected with its registers unchanged.  There is no PBI ROM (the
+board has no MPD / EXTSEL), so the OS does not install a handler: programs
+access the registers directly.
+
+**`sid-cctl`:** `$D5xx` belongs to the SID: cartridges that bank-switch
+through CCTL (XEGS, AtariMax, SpartaDOS X, ...) cannot be used with it; use
+`sid-pbi` then.
 
 ---
 
 ## Pin Mapping
 
-> Full detail including free GPIOs and physical layout: see **[PIN_MAPPING.md](PIN_MAPPING.md)**.
+Same pins as the 6502_monitor firmware (J3 of the ESP32-BOBOARD-5V, 5 V side
+of the TXS0108E); full table in [PIN_MAPPING.md](PIN_MAPPING.md), wiring
+infographics in [`../6502_monitor/docs/`](../6502_monitor/docs/wiring_atari.svg).
 
-### Control Signals
+| Signal | GPIO | J3 pin |
+|---|---|---|
+| D0-D7 | 4, 5, 13, 14, 16, 17, 18, 19 | 2, 3, 5, 6, 22, 23, 8, 9 |
+| A0-A7 | 34, 35, 36, 39, 32, 33, 21, 27 | 18, 19, 20, 21, 16, 17, 10, 15 |
+| PHI2 / R/W | 2 / 15 | 1 / 7 |
+| `~D1XX` (sid-pbi) | 22 | 11 |
+| `~CCTL` (sid-cctl) | 23 | 12 |
+| DAC1 audio | 25 | (module pin) |
+| TX debug | 1 | J4 pin 3 |
 
-| Signal | GPIO | Direction | Description |
-|--------|------|-----------|-------------|
-| PHI2 | 2 | Input | 6502 phase-2 clock (1.79 MHz PAL); rising edge triggers bus sample |
-| R/W | 15 | Input | High = Read, Low = Write |
-| SEL_N | 22 | Input, Active Low | CCTL — asserted by Atari for $D5xx page accesses |
-
-### Data Bus (bidirectional)
-
-| Bit | GPIO |
-|-----|------|
-| D0 | 4 |
-| D1 | 5 |
-| D2 | 13 |
-| D3 | 14 |
-| D4 | 16 |
-| D5 | 17 |
-| D6 | 18 |
-| D7 | 19 |
-
-### Address Bus (input only, A0–A4)
-
-| Bit | GPIO | GPIO_IN1 bit |
-|-----|------|-------------|
-| A0 | 34 | bit 2 |
-| A1 | 35 | bit 3 |
-| A2 | 36 | bit 4 |
-| A3 | 39 | bit 7 |
-| A4 | 32 | bit 0 |
-
-Only 5 address bits are decoded (32 locations). A5–A10 are not wired.
-
-### Audio and Debug
-
-| Signal | GPIO | Direction | Description |
-|--------|------|-----------|-------------|
-| DAC1 | 25 | Output | SID audio — 8-bit, 22050 Hz, mono |
-| TX | 1 | Output | Serial debug, 115200 baud, TX-only |
-
----
-
-## Memory Map
-
-```
-CCTL active ($D5xx, SEL_N low) — A0-A4 decoded to 5-bit offset:
-
-Offset   Full address   Description
-──────   ────────────   ──────────────────────────────────────────────────
-0x00     $D500          SID register 0  (V1 Freq Lo)
- …        …              …
-0x1E     $D51E          SID register 30 (unused)
-0x1F     $D5FF *        Latch control — bit 0: 1=enable, 0=disable+reset
-```
-
-\* $D5FF is decoded as offset 0x1F because only A0–A4 are wired (all five bits high).  
-SID registers are accessible for reads and writes only when the latch is enabled.
-
----
-
-## Architecture
-
-### Dual-Core Split
-
-```
-Core 0 (system)                  Core 1 (dedicated)
-────────────────                 ─────────────────────────────────────────
-loop()                           MonitorTask  (priority 10, IRAM)
- ├─ sidLight->process()           ├─ PHI2 rising-edge sync (tight polling)
- ├─ drain latchEventQueue         ├─ SEL_N (CCTL) detection
- └─ drain log_queue → Serial      ├─ A0-A4 address decode
-                                  ├─ Data bus drive (read cycle)
-esp_timer @ 22050 Hz             └─ Data bus sample (write cycle)
- └─ cSIDLight::_tick()
-    └─ dacWrite(GPIO 25)
-```
-
-**Core 1** owns the entire bus timing path. No FreeRTOS primitives are called inside the hot loop — the only inter-core communication is two non-blocking `xQueueSend(..., 0)` calls: one for latch state changes, one for the log queue.
-
-**Cross-core shared state** (`_regs[]`) is declared `volatile uint8_t`. On Xtensa LX6, DRAM is not cached per-core, so volatile byte stores from Core 1 are immediately visible to Core 0 without explicit barriers.
-
-**Log drain** dequeues at most **one entry per `loop()` iteration**. `Serial.printf()` at 115200 baud blocks ~3.5 ms per line; draining all 64 entries in a tight loop would stall `sidLight->process()` for ~220 ms, delaying SID register propagation to the audio engine. The 64-entry queue absorbs bursts while `process()` runs at full loop rate.
-
-### MonitorTask Flow (Core 1)
-
-```
-for (;;) {
-    wait PHI2 rising edge          ← tight polling loop, no interrupt latency
-    if SEL_N not asserted → continue
-
-    decode A0-A4 from GPIO_IN1     ← 5-bit offset (0x00-0x1F)
-
-    if R/W == Read:
-        if latch enabled and offset < 0x1F:
-            drive data bus from sidLight->read(offset)
-        wait PHI2 falling edge
-        release data bus (High-Z)
-
-    if R/W == Write:
-        wait PHI2 falling edge     ← data stable on falling edge
-        sample data bus
-        if offset == 0x1F:         → update latch, notify Core 0
-        else if latch enabled:     → sidLight->write(offset, data)
-}
-```
-
-### Data Bus LUT
-
-`data_set_lut[256]` is precomputed at boot in IRAM: each entry holds the GPIO bitmask for the 8 data pins corresponding to a given byte value. Driving the bus on a read is an O(1) indexed bitmask lookup with no bit-scatter at runtime.
+> **Changed from the previous firmware:** CCTL was read on GPIO 22 with
+> A0-A4 only; it is now on GPIO 23 (J3 pin 12) with A0-A7, as on the
+> 6502_monitor firmware and the board netlist.
 
 ---
 
 ## SID Register Map
 
-Registers are accessible at `$D500` (offset `0x00`) through `$D51E` (offset `0x1E`).  
-Offset `0x1F` ($D5FF) is the latch control register, not a SID register.
+Base `$D500` (sid-cctl) or `$D100` (sid-pbi).
 
-| Offset | Address | Register | Description |
-|--------|---------|----------|-------------|
-| `$00/$01` | `$D500/$D501` | V1 Freq Lo/Hi | Voice 1 frequency (16-bit) |
-| `$02/$03` | `$D502/$D503` | V1 PW Lo/Hi | Voice 1 pulse width (not emulated) |
-| `$04` | `$D504` | V1 CTRL | bit 0 = GATE, bit 6 = SQR wave |
-| `$05/$06` | `$D505/$D506` | V1 AD/SR | Voice 1 ADSR (not emulated) |
-| `$07–$0D` | `$D507–$D50D` | V2 | Voice 2 (same layout as V1) |
-| `$0E–$14` | `$D50E–$D514` | V3 | Voice 3 (same layout as V1) |
-| `$15/$16` | `$D515/$D516` | FC Lo/Hi | Filter cutoff (not emulated) |
-| `$17` | `$D517` | Res/Filt | Filter resonance / routing (not emulated) |
-| `$18` | `$D518` | MODE/VOL | Bits 3:0 = master volume (0–15) |
-| `$19/$1A` | `$D519/$D51A` | OSC3/ENV3 | Voice 3 readouts |
-| `$1B–$1E` | `$D51B–$D51E` | — | Unused |
-| **`$1F`** | **`$D5FF`** | **LATCH** | **bit 0: 1=enable SID, 0=disable+reset** |
+| Offset | Register | Emulated |
+|--------|----------|----------|
+| `$00/$01` | V1 Freq Lo/Hi | yes |
+| `$02/$03` | V1 PW Lo/Hi | no |
+| `$04` | V1 CTRL | GATE (bit 0) |
+| `$05/$06` | V1 AD/SR | no |
+| `$07-$0D` | Voice 2 (as V1) | as V1 |
+| `$0E-$14` | Voice 3 (as V1) | as V1 |
+| `$15/$16` | FC Lo/Hi | no |
+| `$17` | RES/FILT | no |
+| `$18` | MODE/VOL | volume (bits 3-0) |
+| `$19/$1A` | POTX / POTY | no (read back the stored byte) |
+| `$1B/$1C` | OSC3 / ENV3 | no (read back the stored byte) |
+| `$1D/$1E` | unused | stored |
+| `$FF` | `PBI_SELECT` (sid-pbi only) | latch, bit 7 |
+
+---
+
+## Architecture
+
+```
+Core 0                                    Core 1 (interrupts masked)
+──────────────────────────────            ─────────────────────────────────────
+LogTask   only writer on Serial            MonitorTask (IRAM, highest priority)
+          drains the log ring               PHI2 falls: release D0-D7, log
+SidTask   process() every 1 ms             + BUS_ADDR_SETTLE_NS (200 ns):
+          registers -> synthesis              sample A0-A7, R/W, select
+esp_timer 22.2 kHz _tick() -> DAC1            read of $00-$1E: byte to GPIO.out
+                                            PHI2 rises: one store drives D0-D7
+                                            write: sample + BUS_WR_SAMPLE_NS
+                                              (120 ns) -> register / latch
+```
+
+- **Bus loop** (from the 6502_monitor firmware, itself from
+  Vera-Module-RBL-XE): Core 1 runs only MonitorTask with interrupts masked
+  and the interrupt watchdog off.  The PHI1 decode is inline assembly:
+  address from two lookup tables, register byte placed in `GPIO.out` while
+  the outputs are still off, turned on with one store at the PHI2 rising
+  edge.  A select seen only on the rising edge is handled from that sample.
+  GPIO accesses without `memw`.
+- **Registers:** the bus loop stores straight into the cSIDLight register
+  array (`regs()`); SidTask turns changes into synthesis parameters within
+  1 ms.
+- **Log:** lock-free single-producer / single-consumer ring (1024 events)
+  from Core 1 to LogTask; one `Serial.write()` per line, events dropped and
+  counted when the ring is full.
+
+Serial output:
+
+```
+[sidboard] SID PBI device, ID $80: $D100-$D11E, select $D1FF (~D1XX, J3 pin 11)
+[sidboard] cSIDLight: 3 voices, DAC1 on GPIO 25, 22222 Hz
+[sidboard] Bus loop on Core 1 (settle 200 ns, write sample 120 ns), log 115200 baud
+[    1.234567] [D1FF - PBI_SELECT  ] W $80  SELECTED
+[    1.234601] [D100 - V1_FREQ_LO  ] W $3C  SEL
+[    1.234620] [D104 - V1_CTRL     ] W $11  SEL
+[    1.300000] [D104 - V1_CTRL     ] R $11  SEL DRV
+```
+
+`SEL` = the SID answers, `DRV` = byte driven by the board, `-` = deselected
+(the logged byte is whatever was on the bus).
 
 ---
 
@@ -221,10 +176,10 @@ voiceVol = (reg[$18] & 0x0F) × 128 / 48   // max 40 per voice; 3 × 40 = 120 �
 
 | Method | Caller | Description |
 |--------|--------|-------------|
-| `write(reg, val)` | MonitorTask (Core 1, IRAM) | Single `volatile` byte store — no locking |
-| `read(reg)` | MonitorTask (Core 1, IRAM) | Single `volatile` byte load |
-| `process()` | `loop()` (Core 0) | Snapshot diff → update synthesis params |
-| `reset()` | `loop()` on latch disable | Zero all registers, silence voices |
+| `write(reg, val)` | AUDIO_DEMO timer | Single `volatile` byte store — no locking (the bus loop stores into `regs()` directly) |
+| `process()` | SidTask (Core 0, every 1 ms) | Snapshot diff → update synthesis params |
+| `regs()` | `setup()` | Register array, read and written directly by the bus loop |
+| `reset()` | not used | Zero all registers, silence voices |
 | `_tick()` | `esp_timer` (Core 0) | Generate one audio sample, write DAC |
 
 ---
@@ -249,138 +204,80 @@ If connected to POKEY ECI AUDIO IN, the SID signal mixes directly into the POKEY
 
 ---
 
-## Build and Flash
+## Audio Circuit
 
-### Prerequisites
-
-- [PlatformIO](https://platformio.org/) (CLI or IDE plugin)
-- ESP32 platform: `espressif32 @ 6.6.0`
-
-### Environments
-
-Two build environments are defined in `platformio.ini`:
-
-| Environment | Description |
-|-------------|-------------|
-| `nodemcu-32s` | Normal firmware — Atari bus monitor + cSIDLight |
-| `nodemcu-32s-demo` | Demo mode (`-D AUDIO_DEMO`) — plays `Commando_dmp.h` at 50 Hz, no Atari required |
-
-### Build
-
-```bash
-# Normal (Atari bus monitor)
-pio run -e nodemcu-32s
-
-# Demo (standalone SID playback)
-pio run -e nodemcu-32s-demo
-```
-
-### Flash
-
-```bash
-pio run -e nodemcu-32s -t upload
-# or
-pio run -e nodemcu-32s-demo -t upload
-```
-
-Default upload speed: 921600 baud. Adjust `upload_port` in `platformio.ini` if needed.
-
-### Monitor
-
-```bash
-pio device monitor -b 115200
-```
-
-Serial output is TX-only on GPIO 1. Example log output (normal mode):
+GPIO 25 is the ESP32 DAC1 output (0–3.3 V, 8-bit resolution, 22.2 kHz).
 
 ```
-[sidboard] CCTL/SID Firmware Ready (TX-Only)
-[sidboard] cSIDLight initialized, DAC1 on GPIO 25
-[sidboard] MonitorTask running on Core 1.
->>> Latch ENABLED
-[    0.123456] [LATCH] $D5FF ENABLED  ($01)
-[    0.123500] [D500 - V1_FREQ_LO  ] W $3C
-[    0.123501] [D504 - V1_CTRL     ] W $11
+GPIO 25 (DAC1)
+    │
+   10 µF  ──── DC block capacitor
+    │
+  100 kΩ  ──── audio input / POKEY ECI AUDIO IN
+                │
+               10 nF ─── GND      (low-pass, fc ≈ 1.75 kHz)
 ```
 
-Demo mode startup:
-
-```
-[sidboard] CCTL/SID Firmware Ready (TX-Only)
-[sidboard] cSIDLight initialized, DAC1 on GPIO 25
-[sidboard] AUDIO_DEMO: Commando, 1100 frames @ 50 Hz (22.0 s, looping)
-[sidboard] MonitorTask running on Core 1.
-```
-
-### Build Flags
-
-| Flag | Purpose |
-|------|---------|
-| `-O3` | Maximum optimization |
-| `-Wno-shift-count-overflow` | Suppress benign GPIO bitmask shift warnings |
-| `-D USE_ESP32_REGISTER_ACCESS` | Enable direct `GPIO.out_w1ts` / `GPIO.in` register access |
-| `-D AUDIO_DEMO` | Enable standalone SID demo player (demo environment only) |
-
-### AUDIO_DEMO Mode
-
-When built with `-D AUDIO_DEMO`, the firmware loads a pre-captured SID register dump (`examples/Commando_dmp.h`) and replays it at **50 Hz** (PAL VBlank rate) via a dedicated `esp_timer`, writing all 25 SID registers to `cSIDLight` each frame.
-
-The dump format is a flat `uint8_t` array: `N_frames × 25 bytes`, registers `0x00–0x18` per frame. At frame end the player loops.
-
-To use a different tune, replace `Commando_dmp.h` with any SID register dump in the same format (generated by `sidplayfp` + a custom capture tool, or equivalent) and update the `#include` in `main.cpp`.
+If connected to POKEY ECI AUDIO IN, the SID signal mixes into the POKEY
+audio and appears on the Atari speaker output.
 
 ---
 
-## Usage from Atari Side
+## Build and Flash
 
-SID registers are directly accessible via POKE/PEEK in the $D5xx range. The latch must be enabled first.
-
-### Enable the SID
-
-Write `$01` to `$D5FF` ($54783):
-
-```
-POKE 54783, 1   ; $D5FF — enable SID
+```bash
+pio run -e sid-cctl -t upload     # SID at $D500
+pio run -e sid-pbi  -t upload     # SID at $D100, PBI device
+pio run -e sid-demo -t upload     # built-in tune, no Atari needed
+pio device monitor
 ```
 
-### Disable the SID
+**The ESP32 module is programmed only disconnected from the Atari, from the
+PC.**  As on the 6502_monitor firmware, `efuse_vdd_sdio.py` checks the
+VDD_SDIO efuses before every upload and burns them to 3.3 V if blank
+(**irreversible**; GPIO12 is still wired to J3 pin 4), and the serial
+monitor does not toggle RTS / DTR.  Bus timing can be tuned with
+`-D BUS_ADDR_SETTLE_NS=...`, `-D BUS_WR_SAMPLE_NS=...`,
+`-D BUS_PHI2_HIGH_MAX_NS=...`.
 
-```
-POKE 54783, 0   ; $D5FF — disable and silence SID
-```
+---
 
-### Write a SID Register (Atari BASIC)
+## Usage from the Atari
+
+### sid-cctl (Atari BASIC)
 
 ```basic
-POKE 54783, 1        : REM enable SID
-POKE 54528, 100      : REM $D500 — V1 Freq Lo = 100
-POKE 54529, 10       : REM $D501 — V1 Freq Hi = 10
-POKE 54532, 17       : REM $D504 — V1 CTRL: GATE on + SQR wave ($11)
-POKE 54552, 15       : REM $D518 — MODE/VOL: max volume
+10 POKE 54528,100   : REM $D500 V1 FREQ LO
+20 POKE 54529,10    : REM $D501 V1 FREQ HI
+30 POKE 54552,15    : REM $D518 MODE/VOL: max volume
+40 POKE 54532,17    : REM $D504 V1 CTRL: GATE + SQR
+50 X=PEEK(54532)    : REM read back V1 CTRL
 ```
 
-### Read a SID Register (Atari BASIC)
+### sid-pbi (Atari BASIC)
 
 ```basic
-POKE 54783, 1
-X = PEEK(54532)      : REM read V1 CTRL ($D504)
+10 POKE 53759,128   : REM $D1FF: select the SID (PBI ID $80)
+20 POKE 53504,100   : REM $D100 V1 FREQ LO
+30 POKE 53505,10    : REM $D101 V1 FREQ HI
+40 POKE 53528,15    : REM $D118 MODE/VOL
+50 POKE 53508,17    : REM $D104 V1 CTRL: GATE + SQR
+60 POKE 53759,0     : REM deselect: the note keeps playing
 ```
 
-### Write a SID Register (cc65 C)
+### cc65
 
 ```c
-#define SID_BASE  0xD500
-#define SID_LATCH 0xD5FF
-
-/* enable */
-*(volatile uint8_t *)SID_LATCH = 0x01;
-
-/* set voice 1 frequency and gate */
-*(volatile uint8_t *)(SID_BASE + 0x00) = 0x3C;  /* Freq Lo */
-*(volatile uint8_t *)(SID_BASE + 0x01) = 0x0A;  /* Freq Hi */
-*(volatile uint8_t *)(SID_BASE + 0x04) = 0x11;  /* CTRL: GATE + SQR */
-*(volatile uint8_t *)(SID_BASE + 0x18) = 0x0F;  /* MODE/VOL: max */
+#define SID ((volatile unsigned char *)0xD500)   /* 0xD100 for sid-pbi */
+/* sid-pbi only: */ *(volatile unsigned char *)0xD1FF = 0x80;
+SID[0x00] = 0x3C;  SID[0x01] = 0x0A;   /* V1 frequency */
+SID[0x18] = 0x0F;                      /* volume */
+SID[0x04] = 0x11;                      /* GATE + SQR */
 ```
+
+The players in `examples/` write through an `I:` CIO handler that came from
+a PBI ROM (`6502/pbi-driver.s`); that ROM cannot be loaded on this board (no
+MPD / EXTSEL), so they need to be adapted to write the registers directly.
 
 ---
 
@@ -388,23 +285,12 @@ X = PEEK(54532)      : REM read V1 CTRL ($D504)
 
 ```
 sidboard/
-├── platformio.ini              Build configuration (ESP32, 240 MHz, -O3)
-├── PIN_MAPPING.md              Full ESP32 ↔ Atari bus pin assignment table
-├── Logs.md                     Architecture decisions and change log
-├── README.md                   This file
-├── src/
-│   └── main.cpp               MonitorTask, setup(), loop(), LUT, GPIO config
-├── include/
-│   └── csidlight.h            cSIDLight class — audio engine (header-only)
-├── 6502/
-│   ├── src/pbi-driver.s       Legacy 6502 CIO device handler (not loaded)
-│   ├── pbi-driver.ld          Linker script
-│   └── Makefile               Builds pbi-driver.h from assembly
-└── examples/
-    ├── Commando_dmp.h             SID register dump — Commando (27500 bytes, 1100 frames @ 50 Hz)
-    ├── cc65/
-    │   ├── sid_dump_player.c   SID dump player (direct POKE, adapt for $D5xx)
-    │   └── Makefile
-    └── atari-basic/
-        └── sid_dump_player.bas BASIC SID dump player (adapt for $D5xx)
+├── platformio.ini       sid-cctl, sid-pbi, sid-demo
+├── efuse_vdd_sdio.py    VDD_SDIO efuse check before upload (from 6502_monitor)
+├── PIN_MAPPING.md       pins and register map
+├── Logs.md              decisions and change log
+├── src/main.cpp         bus loop (Core 1), SidTask, LogTask, setup
+├── include/csidlight.h  cSIDLight audio engine (header-only)
+├── 6502/                legacy PBI ROM / I: handler (not loadable on this board)
+└── examples/            Commando_dmp.h (demo tune), I: players (cc65, BASIC)
 ```
