@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1028" viewBox="0 0 1180 1028" font-family="DejaVu Sans, Arial, sans-serif">
-<rect width="1180" height="1028" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1048" viewBox="0 0 1180 1048" font-family="DejaVu Sans, Arial, sans-serif">
+<rect width="1180" height="1048" fill="#ffffff"/>
 <text x="590.0" y="40" font-size="24" font-weight="bold" text-anchor="middle">6502_monitor - Atari 130XE wiring (env nodemcu-32s)</text>
 <text x="590.0" y="68" font-size="14" fill="#555" text-anchor="middle">J3 of the ESP32-BOBOARD-5V to the cartridge slot (~CCTL, bus) and the ECI (~D1XX)</text>
 <rect x="40" y="96" width="230" height="812" rx="8" fill="#f4f6f8" stroke="#888"/>
@@ -289,7 +289,8 @@
 <text x="748" y="935" font-size="13">GND</text>
 <rect x="890" y="927" width="22" height="8" fill="#c92a2a"/>
 <text x="918" y="935" font-size="13">+5V</text>
-<text x="40" y="962" font-size="13" fill="#333">Pinouts checked against atarimania.com (Atari 8-bit FAQ) and computersmuseum.com (130XE).</text>
-<text x="40" y="982" font-size="13" fill="#333">800XL: the PBI connector carries no ~D1XX; $D1xx must be decoded from A8-A15 (external logic, not shown).</text>
-<text x="40" y="1002" font-size="13" fill="#333">Never connect J3 26 (EN) and 27-28 (+3V3).  Program the ESP32 only disconnected from the computer.</text>
+<text x="40" y="962" font-size="13" fill="#333">Pinouts checked against atarimania.com, computersmuseum.com and the RetroBitLab KiCad library</text>
+<text x="40" y="982" font-size="13" fill="#333">(ATARI-CARTRIDGE / ECIBUS symbols; footprints: pins 1-15 / 1-7 on the back, A-S / A-H on the front, 1 opposite A).</text>
+<text x="40" y="1002" font-size="13" fill="#333">800XL: the PBI connector carries no ~D1XX; $D1xx must be decoded from A8-A15 (external logic, not shown).</text>
+<text x="40" y="1022" font-size="13" fill="#333">Never connect J3 26 (EN) and 27-28 (+3V3).  Program the ESP32 only disconnected from the computer.</text>
 </svg>
