@@ -3,3 +3,9 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# generated
+examples/SIDDUMP.BIN
+examples/cc65/*.xex
+examples/cc65/*.o
+__pycache__/

@@ -275,9 +275,29 @@ SID[0x18] = 0x0F;                      /* volume */
 SID[0x04] = 0x11;                      /* GATE + SQR */
 ```
 
-The players in `examples/` write through an `I:` CIO handler that came from
-a PBI ROM (`6502/pbi-driver.s`); that ROM cannot be loaded on this board (no
-MPD / EXTSEL), so they need to be adapted to write the registers directly.
+### Dump players (`examples/`)
+
+A dump is a flat list of frames of 25 bytes (SID registers `$00-$18`), one
+frame per PAL VBlank.  `examples/mkdump.py` turns `Commando_dmp.h` into
+`SIDDUMP.BIN` (27500 bytes, 1100 frames, 22 s); copy it to the Atari disk.
+
+| Player | Build / use | Notes |
+|---|---|---|
+| `cc65/sid_dump_player.xex` | `make` in `examples/cc65` | sid-cctl, SID at `$D500` |
+| `cc65/sid_dump_player_pbi.xex` | same | sid-pbi: `$80` to `$D1FF`, SID at `$D100`, `$00` at the end |
+| `atari-basic/sid_dump_player.bas` | `PBI=0` / `PBI=1` in line 50 | a 23-byte USR routine copies each frame (BASIC alone is too slow for 50 Hz); loading 27500 bytes with `GET` takes about a minute |
+
+Both read `D:SIDDUMP.BIN` into RAM, write one frame per VBlank, stop on
+any key, then gate the voices off, set the volume to 0 and (sid-pbi)
+deselect.  `python3 test_players.py` (in `examples/`, needs py65) runs
+both cc65 players on a fake Atari (CIO with E: and the dump file, RTCLOK,
+the sidboard model) and the BASIC USR routine: all 1100 frames written,
+one per VBlank, nothing outside the SID page.  The BASIC program itself is
+not run (no BASIC interpreter in the test).
+
+The old players wrote through an `I:` CIO handler from a PBI ROM
+(`6502/pbi-driver.s`) that this board cannot load (no MPD / EXTSEL): they
+were rewritten for direct register access.
 
 ---
 
@@ -292,5 +312,5 @@ sidboard/
 ├── src/main.cpp         bus loop (Core 1), SidTask, LogTask, setup
 ├── include/csidlight.h  cSIDLight audio engine (header-only)
 ├── 6502/                legacy PBI ROM / I: handler (not loadable on this board)
-└── examples/            Commando_dmp.h (demo tune), I: players (cc65, BASIC)
+└── examples/            Commando_dmp.h, mkdump.py, players (cc65, BASIC), test_players.py
 ```

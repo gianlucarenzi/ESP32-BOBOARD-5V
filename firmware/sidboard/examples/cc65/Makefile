@@ -1,11 +1,20 @@
-TARGET = sid_dump_player
+# SID dump player (cc65): one executable per sidboard build.
+#   make   sid_dump_player.xex (sid-cctl, $D500) and
+#          sid_dump_player_pbi.xex (sid-pbi, $D100 + select $D1FF),
+#          ../SIDDUMP.BIN from ../Commando_dmp.h
 
-.PHONY: all clean
+all: sid_dump_player.xex sid_dump_player_pbi.xex ../SIDDUMP.BIN
 
-all: $(TARGET).xex
+sid_dump_player.xex: sid_dump_player.c
+	cl65 -t atari -O -DSID_PBI=0 -o $@ $<
 
-$(TARGET).xex: $(TARGET).c
-	cl65 -t atari -O -o $@ $<
+sid_dump_player_pbi.xex: sid_dump_player.c
+	cl65 -t atari -O -DSID_PBI=1 -o $@ $<
+
+../SIDDUMP.BIN: ../Commando_dmp.h ../mkdump.py
+	cd .. && python3 mkdump.py Commando_dmp.h SIDDUMP.BIN
 
 clean:
-	rm -f $(TARGET).o $(TARGET).xex
+	rm -f *.o *.xex ../SIDDUMP.BIN
+
+.PHONY: all clean
