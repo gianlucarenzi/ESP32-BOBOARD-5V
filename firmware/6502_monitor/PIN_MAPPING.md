@@ -16,7 +16,10 @@ level translators.
 | **D7** | GPIO 19 | D19 |
 
 D0-D7 are inputs; the firmware drives them only while answering a read of a
-selected window (RAM or bank register).
+selected window (RAM, bank count or bank register).
+
+Window map: RAM `$xx00-$xx7F`, bank count `$xxFB-$xxFC` (R, 16 bit), bank
+register `$xxFD-$xxFE` (R/W, 16 bit), select latch `$xxFF` (W, bit 7).
 
 ## 2. Address Bus (A0-A7)
 | 6502 Signal | ESP32 GPIO | Board Label | Note |

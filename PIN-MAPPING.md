@@ -51,7 +51,8 @@ Liberi anche il canale 8 di U4 (pin 9 / 12) e i pin 24–25 di J3.
 ## Note Tecniche
 
 - **Solo A0–A7**: la pagina ($D1 o $D5) è data dal segnale di selezione.
-- **D0–D7** sono ingressi; il firmware li pilota solo per rispondere a una lettura della RAM o del registro del banco di una finestra selezionata.
+- **D0–D7** sono ingressi; il firmware li pilota solo per rispondere a una lettura della RAM, del numero di banchi o del registro del banco di una finestra selezionata.
+- **Mappa della finestra**: RAM `$xx00–$xx7F`, numero di banchi `$xxFB–$xxFC` (R, 16 bit), registro del banco `$xxFD–$xxFE` (R/W, 16 bit), latch di selezione `$xxFF` (W, bit 7).
 - **Bus Indirizzi A0–A5**: nel registro `GPIO_IN1_REG` (GPIO 32–39); A6–A7 in `GPIO_IN_REG`, insieme ai segnali di controllo.
 - **Bus Dati**: GPIO non contigui → lettura con shift (`decode_data()`), scrittura tramite la tabella `drive_lut[256]` di parole `GPIO.out`.
 - **J4 (debug UART)**: GND (pin 1), RX0 (pin 2, da lasciare scollegato), TX0 (pin 3, 3,3 V).
