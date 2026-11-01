@@ -1,0 +1,292 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1028" viewBox="0 0 1180 1028" font-family="DejaVu Sans, Arial, sans-serif">
+<rect width="1180" height="1028" fill="#ffffff"/>
+<text x="590.0" y="40" font-size="24" font-weight="bold" text-anchor="middle">6502_monitor - Commodore 64 GeoRAM wiring (env c64)</text>
+<text x="590.0" y="68" font-size="14" fill="#555" text-anchor="middle">J3 of the ESP32-BOBOARD-5V to the C64 expansion port: /IO1 on J3 12, /IO2 on J3 11</text>
+<rect x="40" y="96" width="230" height="812" rx="8" fill="#f4f6f8" stroke="#888"/>
+<text x="155" y="118" font-size="15" font-weight="bold" text-anchor="middle">ESP32-BOBOARD-5V  J3</text>
+<circle cx="250" cy="142" r="7" fill="#e07b00" stroke="#333"/>
+<text x="234" y="147" font-size="13" text-anchor="end" fill="#000"> 1  PHI2</text>
+<line x1="258" y1="142" x2="370" y2="142" stroke="#e07b00" stroke-width="3"/>
+<polygon points="370,136 380,142 370,148" fill="#e07b00"/>
+<rect x="384" y="132" width="190" height="20" rx="10" fill="#e07b00" opacity="0.12" stroke="#e07b00"/>
+<text x="394" y="147" font-size="13" fill="#000">C64 E  PHI2</text>
+<circle cx="250" cy="166" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="171" font-size="13" text-anchor="end" fill="#000"> 2  D0</text>
+<line x1="258" y1="166" x2="370" y2="166" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,160 380,166 370,172" fill="#2f6fdf"/>
+<rect x="384" y="156" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="171" font-size="13" fill="#000">C64 21  D0</text>
+<circle cx="250" cy="190" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="195" font-size="13" text-anchor="end" fill="#000"> 3  D1</text>
+<line x1="258" y1="190" x2="370" y2="190" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,184 380,190 370,196" fill="#2f6fdf"/>
+<rect x="384" y="180" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="195" font-size="13" fill="#000">C64 20  D1</text>
+<circle cx="250" cy="214" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="219" font-size="13" text-anchor="end" fill="#999"> 4  n.c. (GPIO12)</text>
+<circle cx="250" cy="238" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="243" font-size="13" text-anchor="end" fill="#000"> 5  D2</text>
+<line x1="258" y1="238" x2="370" y2="238" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,232 380,238 370,244" fill="#2f6fdf"/>
+<rect x="384" y="228" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="243" font-size="13" fill="#000">C64 19  D2</text>
+<circle cx="250" cy="262" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="267" font-size="13" text-anchor="end" fill="#000"> 6  D3</text>
+<line x1="258" y1="262" x2="370" y2="262" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,256 380,262 370,268" fill="#2f6fdf"/>
+<rect x="384" y="252" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="267" font-size="13" fill="#000">C64 18  D3</text>
+<circle cx="250" cy="286" r="7" fill="#e07b00" stroke="#333"/>
+<text x="234" y="291" font-size="13" text-anchor="end" fill="#000"> 7  R/W</text>
+<line x1="258" y1="286" x2="370" y2="286" stroke="#e07b00" stroke-width="3"/>
+<polygon points="370,280 380,286 370,292" fill="#e07b00"/>
+<rect x="384" y="276" width="190" height="20" rx="10" fill="#e07b00" opacity="0.12" stroke="#e07b00"/>
+<text x="394" y="291" font-size="13" fill="#000">C64 5  R/W</text>
+<circle cx="250" cy="310" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="315" font-size="13" text-anchor="end" fill="#000"> 8  D6</text>
+<line x1="258" y1="310" x2="370" y2="310" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,304 380,310 370,316" fill="#2f6fdf"/>
+<rect x="384" y="300" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="315" font-size="13" fill="#000">C64 15  D6</text>
+<circle cx="250" cy="334" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="339" font-size="13" text-anchor="end" fill="#000"> 9  D7</text>
+<line x1="258" y1="334" x2="370" y2="334" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,328 380,334 370,340" fill="#2f6fdf"/>
+<rect x="384" y="324" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="339" font-size="13" fill="#000">C64 14  D7</text>
+<circle cx="250" cy="358" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="363" font-size="13" text-anchor="end" fill="#000">10  A6</text>
+<line x1="258" y1="358" x2="370" y2="358" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,352 380,358 370,364" fill="#1f9d55"/>
+<rect x="384" y="348" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="363" font-size="13" fill="#000">C64 S  A6</text>
+<circle cx="250" cy="382" r="7" fill="#d6336c" stroke="#333"/>
+<text x="234" y="387" font-size="13" text-anchor="end" fill="#000">11  ~D1XX</text>
+<line x1="258" y1="382" x2="370" y2="382" stroke="#d6336c" stroke-width="3"/>
+<polygon points="370,376 380,382 370,388" fill="#d6336c"/>
+<rect x="384" y="372" width="190" height="20" rx="10" fill="#d6336c" opacity="0.12" stroke="#d6336c"/>
+<text x="394" y="387" font-size="13" fill="#000">C64 10  ~IO2</text>
+<circle cx="250" cy="406" r="7" fill="#d6336c" stroke="#333"/>
+<text x="234" y="411" font-size="13" text-anchor="end" fill="#000">12  ~CCTL</text>
+<line x1="258" y1="406" x2="370" y2="406" stroke="#d6336c" stroke-width="3"/>
+<polygon points="370,400 380,406 370,412" fill="#d6336c"/>
+<rect x="384" y="396" width="190" height="20" rx="10" fill="#d6336c" opacity="0.12" stroke="#d6336c"/>
+<text x="394" y="411" font-size="13" fill="#000">C64 7  ~IO1</text>
+<circle cx="250" cy="430" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="435" font-size="13" text-anchor="end" fill="#999">13  n.c. (GPIO25)</text>
+<circle cx="250" cy="454" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="459" font-size="13" text-anchor="end" fill="#999">14  n.c. (GPIO26)</text>
+<circle cx="250" cy="478" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="483" font-size="13" text-anchor="end" fill="#000">15  A7</text>
+<line x1="258" y1="478" x2="370" y2="478" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,472 380,478 370,484" fill="#1f9d55"/>
+<rect x="384" y="468" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="483" font-size="13" fill="#000">C64 R  A7</text>
+<circle cx="250" cy="502" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="507" font-size="13" text-anchor="end" fill="#000">16  A4</text>
+<line x1="258" y1="502" x2="370" y2="502" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,496 380,502 370,508" fill="#1f9d55"/>
+<rect x="384" y="492" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="507" font-size="13" fill="#000">C64 U  A4</text>
+<circle cx="250" cy="526" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="531" font-size="13" text-anchor="end" fill="#000">17  A5</text>
+<line x1="258" y1="526" x2="370" y2="526" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,520 380,526 370,532" fill="#1f9d55"/>
+<rect x="384" y="516" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="531" font-size="13" fill="#000">C64 T  A5</text>
+<circle cx="250" cy="550" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="555" font-size="13" text-anchor="end" fill="#000">18  A0</text>
+<line x1="258" y1="550" x2="370" y2="550" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,544 380,550 370,556" fill="#1f9d55"/>
+<rect x="384" y="540" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="555" font-size="13" fill="#000">C64 Y  A0</text>
+<circle cx="250" cy="574" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="579" font-size="13" text-anchor="end" fill="#000">19  A1</text>
+<line x1="258" y1="574" x2="370" y2="574" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,568 380,574 370,580" fill="#1f9d55"/>
+<rect x="384" y="564" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="579" font-size="13" fill="#000">C64 X  A1</text>
+<circle cx="250" cy="598" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="603" font-size="13" text-anchor="end" fill="#000">20  A2</text>
+<line x1="258" y1="598" x2="370" y2="598" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,592 380,598 370,604" fill="#1f9d55"/>
+<rect x="384" y="588" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="603" font-size="13" fill="#000">C64 W  A2</text>
+<circle cx="250" cy="622" r="7" fill="#1f9d55" stroke="#333"/>
+<text x="234" y="627" font-size="13" text-anchor="end" fill="#000">21  A3</text>
+<line x1="258" y1="622" x2="370" y2="622" stroke="#1f9d55" stroke-width="3"/>
+<polygon points="370,616 380,622 370,628" fill="#1f9d55"/>
+<rect x="384" y="612" width="190" height="20" rx="10" fill="#1f9d55" opacity="0.12" stroke="#1f9d55"/>
+<text x="394" y="627" font-size="13" fill="#000">C64 V  A3</text>
+<circle cx="250" cy="646" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="651" font-size="13" text-anchor="end" fill="#000">22  D4</text>
+<line x1="258" y1="646" x2="370" y2="646" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,640 380,646 370,652" fill="#2f6fdf"/>
+<rect x="384" y="636" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="651" font-size="13" fill="#000">C64 17  D4</text>
+<circle cx="250" cy="670" r="7" fill="#2f6fdf" stroke="#333"/>
+<text x="234" y="675" font-size="13" text-anchor="end" fill="#000">23  D5</text>
+<line x1="258" y1="670" x2="370" y2="670" stroke="#2f6fdf" stroke-width="3"/>
+<polygon points="370,664 380,670 370,676" fill="#2f6fdf"/>
+<rect x="384" y="660" width="190" height="20" rx="10" fill="#2f6fdf" opacity="0.12" stroke="#2f6fdf"/>
+<text x="394" y="675" font-size="13" fill="#000">C64 16  D5</text>
+<circle cx="250" cy="694" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="699" font-size="13" text-anchor="end" fill="#999">24  n.c.</text>
+<circle cx="250" cy="718" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="723" font-size="13" text-anchor="end" fill="#999">25  n.c.</text>
+<circle cx="250" cy="742" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="747" font-size="13" text-anchor="end" fill="#999">26  EN - do not connect</text>
+<circle cx="250" cy="766" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="771" font-size="13" text-anchor="end" fill="#999">27  +3V3 - do not connect</text>
+<circle cx="250" cy="790" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="795" font-size="13" text-anchor="end" fill="#999">28  +3V3 - do not connect</text>
+<circle cx="250" cy="814" r="7" fill="#333333" stroke="#333"/>
+<text x="234" y="819" font-size="13" text-anchor="end" fill="#000">29  GND</text>
+<line x1="258" y1="814" x2="370" y2="814" stroke="#333333" stroke-width="3"/>
+<polygon points="370,808 380,814 370,820" fill="#333333"/>
+<rect x="384" y="804" width="190" height="20" rx="10" fill="#333333" opacity="0.12" stroke="#333333"/>
+<text x="394" y="819" font-size="13" fill="#000">C64 1  GND</text>
+<circle cx="250" cy="838" r="7" fill="#333333" stroke="#333"/>
+<text x="234" y="843" font-size="13" text-anchor="end" fill="#000">30  GND</text>
+<line x1="258" y1="838" x2="370" y2="838" stroke="#333333" stroke-width="3"/>
+<polygon points="370,832 380,838 370,844" fill="#333333"/>
+<rect x="384" y="828" width="190" height="20" rx="10" fill="#333333" opacity="0.12" stroke="#333333"/>
+<text x="394" y="843" font-size="13" fill="#000">C64 Z  GND</text>
+<circle cx="250" cy="862" r="7" fill="#c92a2a" stroke="#333"/>
+<text x="234" y="867" font-size="13" text-anchor="end" fill="#000">31  +5V</text>
+<line x1="258" y1="862" x2="370" y2="862" stroke="#c92a2a" stroke-width="3"/>
+<polygon points="370,856 380,862 370,868" fill="#c92a2a"/>
+<rect x="384" y="852" width="190" height="20" rx="10" fill="#c92a2a" opacity="0.12" stroke="#c92a2a"/>
+<text x="394" y="867" font-size="13" fill="#000">C64 2  +5V</text>
+<circle cx="250" cy="886" r="7" fill="#bbbbbb" stroke="#333"/>
+<text x="234" y="891" font-size="13" text-anchor="end" fill="#999">32  +5V</text>
+<rect x="840" y="96" width="320" height="572" rx="8" fill="#fbf7ef" stroke="#888"/>
+<text x="1000.0" y="118" font-size="15" font-weight="bold" text-anchor="middle">C64 expansion port</text>
+<circle cx="866" cy="142" r="10" fill="#333333" stroke="#333"/>
+<text x="866" y="146" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">29</text>
+<text x="882" y="147" font-size="13" fill="#000">1  GND</text>
+<circle cx="866" cy="166" r="10" fill="#c92a2a" stroke="#333"/>
+<text x="866" y="170" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">31</text>
+<text x="882" y="171" font-size="13" fill="#000">2  +5V</text>
+<circle cx="866" cy="190" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="195" font-size="13" fill="#aaa">3  +5V</text>
+<circle cx="866" cy="214" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="219" font-size="13" fill="#aaa">4  ~IRQ</text>
+<circle cx="866" cy="238" r="10" fill="#e07b00" stroke="#333"/>
+<text x="866" y="242" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">7</text>
+<text x="882" y="243" font-size="13" fill="#000">5  R/W</text>
+<circle cx="866" cy="262" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="267" font-size="13" fill="#aaa">6  DOTCLK</text>
+<circle cx="866" cy="286" r="10" fill="#d6336c" stroke="#333"/>
+<text x="866" y="290" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">12</text>
+<text x="882" y="291" font-size="13" fill="#000">7  ~IO1</text>
+<circle cx="866" cy="310" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="315" font-size="13" fill="#aaa">8  ~GAME</text>
+<circle cx="866" cy="334" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="339" font-size="13" fill="#aaa">9  ~EXROM</text>
+<circle cx="866" cy="358" r="10" fill="#d6336c" stroke="#333"/>
+<text x="866" y="362" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">11</text>
+<text x="882" y="363" font-size="13" fill="#000">10  ~IO2</text>
+<circle cx="866" cy="382" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="387" font-size="13" fill="#aaa">11  ~ROML</text>
+<circle cx="866" cy="406" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="411" font-size="13" fill="#aaa">12  BA</text>
+<circle cx="866" cy="430" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="435" font-size="13" fill="#aaa">13  ~DMA</text>
+<circle cx="866" cy="454" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="458" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">9</text>
+<text x="882" y="459" font-size="13" fill="#000">14  D7</text>
+<circle cx="866" cy="478" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="482" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">8</text>
+<text x="882" y="483" font-size="13" fill="#000">15  D6</text>
+<circle cx="866" cy="502" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="506" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">23</text>
+<text x="882" y="507" font-size="13" fill="#000">16  D5</text>
+<circle cx="866" cy="526" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="530" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">22</text>
+<text x="882" y="531" font-size="13" fill="#000">17  D4</text>
+<circle cx="866" cy="550" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="554" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">6</text>
+<text x="882" y="555" font-size="13" fill="#000">18  D3</text>
+<circle cx="866" cy="574" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="578" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">5</text>
+<text x="882" y="579" font-size="13" fill="#000">19  D2</text>
+<circle cx="866" cy="598" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="602" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">3</text>
+<text x="882" y="603" font-size="13" fill="#000">20  D1</text>
+<circle cx="866" cy="622" r="10" fill="#2f6fdf" stroke="#333"/>
+<text x="866" y="626" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">2</text>
+<text x="882" y="627" font-size="13" fill="#000">21  D0</text>
+<circle cx="866" cy="646" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="882" y="651" font-size="13" fill="#aaa">22  GND</text>
+<circle cx="1016" cy="142" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="147" font-size="13" fill="#aaa">A  GND</text>
+<circle cx="1016" cy="166" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="171" font-size="13" fill="#aaa">B  ~ROMH</text>
+<circle cx="1016" cy="190" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="195" font-size="13" fill="#aaa">C  ~RESET</text>
+<circle cx="1016" cy="214" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="219" font-size="13" fill="#aaa">D  ~NMI</text>
+<circle cx="1016" cy="238" r="10" fill="#e07b00" stroke="#333"/>
+<text x="1016" y="242" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">1</text>
+<text x="1032" y="243" font-size="13" fill="#000">E  PHI2</text>
+<circle cx="1016" cy="262" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="267" font-size="13" fill="#aaa">F  A15</text>
+<circle cx="1016" cy="286" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="291" font-size="13" fill="#aaa">H  A14</text>
+<circle cx="1016" cy="310" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="315" font-size="13" fill="#aaa">J  A13</text>
+<circle cx="1016" cy="334" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="339" font-size="13" fill="#aaa">K  A12</text>
+<circle cx="1016" cy="358" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="363" font-size="13" fill="#aaa">L  A11</text>
+<circle cx="1016" cy="382" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="387" font-size="13" fill="#aaa">M  A10</text>
+<circle cx="1016" cy="406" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="411" font-size="13" fill="#aaa">N  A9</text>
+<circle cx="1016" cy="430" r="6" fill="#e2e2e2" stroke="#aaa"/>
+<text x="1032" y="435" font-size="13" fill="#aaa">P  A8</text>
+<circle cx="1016" cy="454" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="458" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">15</text>
+<text x="1032" y="459" font-size="13" fill="#000">R  A7</text>
+<circle cx="1016" cy="478" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="482" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">10</text>
+<text x="1032" y="483" font-size="13" fill="#000">S  A6</text>
+<circle cx="1016" cy="502" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="506" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">17</text>
+<text x="1032" y="507" font-size="13" fill="#000">T  A5</text>
+<circle cx="1016" cy="526" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="530" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">16</text>
+<text x="1032" y="531" font-size="13" fill="#000">U  A4</text>
+<circle cx="1016" cy="550" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="554" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">21</text>
+<text x="1032" y="555" font-size="13" fill="#000">V  A3</text>
+<circle cx="1016" cy="574" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="578" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">20</text>
+<text x="1032" y="579" font-size="13" fill="#000">W  A2</text>
+<circle cx="1016" cy="598" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="602" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">19</text>
+<text x="1032" y="603" font-size="13" fill="#000">X  A1</text>
+<circle cx="1016" cy="622" r="10" fill="#1f9d55" stroke="#333"/>
+<text x="1016" y="626" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">18</text>
+<text x="1032" y="627" font-size="13" fill="#000">Y  A0</text>
+<circle cx="1016" cy="646" r="10" fill="#333333" stroke="#333"/>
+<text x="1016" y="650" font-size="10" font-weight="bold" fill="#fff" text-anchor="middle">30</text>
+<text x="1032" y="651" font-size="13" fill="#000">Z  GND</text>
+<text x="1000.0" y="684" font-size="11" fill="#666" text-anchor="middle">number in the circle = J3 pin</text>
+<rect x="40" y="927" width="22" height="8" fill="#2f6fdf"/>
+<text x="68" y="935" font-size="13">data D0-D7</text>
+<rect x="210" y="927" width="22" height="8" fill="#1f9d55"/>
+<text x="238" y="935" font-size="13">address A0-A7</text>
+<rect x="380" y="927" width="22" height="8" fill="#e07b00"/>
+<text x="408" y="935" font-size="13">PHI2, R/W</text>
+<rect x="550" y="927" width="22" height="8" fill="#d6336c"/>
+<text x="578" y="935" font-size="13">selects</text>
+<rect x="720" y="927" width="22" height="8" fill="#333333"/>
+<text x="748" y="935" font-size="13">GND</text>
+<rect x="890" y="927" width="22" height="8" fill="#c92a2a"/>
+<text x="918" y="935" font-size="13">+5V</text>
+<text x="40" y="962" font-size="13" fill="#333">Pinout checked against c64-wiki.com, retroisle.com and the Programmer's Reference Guide tables.</text>
+<text x="40" y="982" font-size="13" fill="#333">J3 11 / 12 are labelled ~D1XX / ~CCTL on the board: with the c64 build they read /IO2 / /IO1.</text>
+<text x="40" y="1002" font-size="13" fill="#333">Never connect J3 26 (EN) and 27-28 (+3V3).  Program the ESP32 only disconnected from the computer.</text>
+</svg>

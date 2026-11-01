@@ -234,6 +234,10 @@ Pagina dei registri:
 
 $D1FF è il registro PBI dell'Atari (l'OS lo legge a ogni IRQ, gli altri dispositivi PBI lo pilotano): con la RAM in $D1xx resta protetto, mai pilotato e scritture ignorate.  Con `-D D1FF_RAM=1` diventa RAM anche lui, solo senza altri dispositivi PBI.
 
+Collegamento all'Atari 130XE (slot cartuccia ed ECI).  Sull'800XL il connettore PBI non porta `~D1XX`: $D1xx va decodificato da A8–A15 con logica esterna, non prevista su questa scheda:
+
+![Collegamento Atari](firmware/6502_monitor/docs/wiring_atari.svg)
+
 I banchi da 256 byte vengono allocati all'avvio dall'heap DRAM libero dell'ESP32 (meno 24 KB di riserva per il sistema); una sola RAM e un solo registro del banco per le due modalità.  Indirizzo lineare: banco = indirizzo >> 8, offset = indirizzo & $FF.  All'accensione: non selezionato, banco 0, RAM a `$00`; il dispositivo non vede il RESET dell'Atari e mantiene lo stato, la RAM non si conserva al reset dell'ESP32.  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF / $D5FF.
 
 #### 3. Commodore 64: GeoRAM 256 KB (ambiente `c64`)
@@ -252,7 +256,10 @@ La stessa scheda, con l'ambiente `c64` (`-D BUS_C64=1`), diventa una GeoRAM comp
 - **Ciclo di bus**: il VIC-II possiede il bus durante PHI1, quindi tutto avviene con PHI2 alto: dopo la salita il firmware attende /IO1 o /IO2 per al massimo 200 ns (`IO_QUALIFY_NS`), legge A0–A7 e, in lettura, pilota subito il byte fino alla discesa di PHI2; in scrittura il dato è campionato 300 ns dopo la salita (`BUS_WR_SAMPLE_NS`)
 - **Stato**: azzerato all'accensione, mantenuto al reset del C64; la RAM non si conserva al reset dell'ESP32
 
-Collegamento alla porta di espansione (pin del C64 dal pinout standard: verificarli sullo schema prima di saldare):
+Collegamento alla porta di espansione (pinout del C64 verificato su c64-wiki.com e retroisle.com):
+
+![Collegamento C64](firmware/6502_monitor/docs/wiring_c64.svg)
+
 
 | Segnale | Porta C64 | J3 |
 |---------|-----------|----|

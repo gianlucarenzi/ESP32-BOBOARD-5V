@@ -28,7 +28,7 @@ GeoRAM.**
 
 | Test | What it checks |
 |---|---|
-| (presence) | block 0 page 0 offset 1 keeps `$A5` and `$5A`; otherwise `NO GEORAM` and stop (the C64 open bus can read `$00`) |
+| (presence) | block 0 page 0 offset 1 keeps `$A5` and `$5A`; otherwise `NO GEORAM (OR A BAD DATA LINE)` with the value read back, e.g. `ERR B=00 P=00 O=01 E=A5 G=AD` for D3 stuck at 1, `G=00` with no unit (the C64 open bus can read `$00`), and stop |
 | `SIZE` | blocks 255..0 get their own number at page 0 offset 0; the first block that does not read it back is the size (block register masked to the size, as on a real GeoRAM); printed and checked against `EXPECT_BLOCKS` |
 | `ALIAS` | block = size is block 0 (skipped with 256 blocks) |
 | `PAGE REG` | the 64 pages of block 0 marked, read back with page register bits 6-7 set: only bits 0-5 count |

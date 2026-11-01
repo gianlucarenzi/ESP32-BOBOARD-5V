@@ -234,6 +234,10 @@ Register page:
 
 $D1FF is the PBI register of the Atari (the OS reads it on every IRQ, other PBI devices drive it): with the RAM in $D1xx it stays protected, never driven and writes ignored.  With `-D D1FF_RAM=1` it becomes RAM too, only without other PBI devices.
 
+Wiring to the Atari 130XE (cartridge slot and ECI).  On the 800XL the PBI connector carries no `~D1XX`: $D1xx has to be decoded from A8–A15 with external logic, not provided on this board:
+
+![Atari wiring](firmware/6502_monitor/docs/wiring_atari.svg)
+
 The 256-byte banks are allocated at boot from the free ESP32 DRAM heap (minus 24 KB kept for the system); one RAM and one bank register for both modes.  Linear address: bank = address >> 8, offset = address & $FF.  Power-up: deselected, bank 0, RAM `$00`; the device does not see the Atari RESET and keeps its state, the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF / $D5FF.
 
 #### 3. Commodore 64: 256 KB GeoRAM (`c64` env)
@@ -252,7 +256,10 @@ The same board, built with the `c64` env (`-D BUS_C64=1`), becomes a GeoRAM-comp
 - **Bus cycle**: the VIC-II owns the bus during PHI1, so everything happens with PHI2 high: after the rise the firmware waits at most 200 ns for /IO1 or /IO2 (`IO_QUALIFY_NS`), samples A0–A7 and, on a read, drives the byte at once until PHI2 falls; write data is sampled 300 ns after the rise (`BUS_WR_SAMPLE_NS`)
 - **State**: zeroed at power-up, kept across a C64 reset; the RAM is not kept across an ESP32 reset
 
-Wiring to the expansion port (C64 pins from the standard pinout: check them against the schematic before soldering):
+Wiring to the expansion port (C64 pinout checked against c64-wiki.com and retroisle.com):
+
+![C64 wiring](firmware/6502_monitor/docs/wiring_c64.svg)
+
 
 | Signal | C64 port | J3 |
 |--------|----------|----|

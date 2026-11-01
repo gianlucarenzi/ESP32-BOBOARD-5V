@@ -9,7 +9,9 @@
 ; The registers are write-only: the program keeps a copy.
 ;
 ; Tests:
-;   0. PRESENT   block 0 page 0 offset 1 keeps $A5 and $5A, else stop
+;   0. PRESENT   block 0 page 0 offset 1 keeps $A5 and $5A, else the value
+;                read back is printed (a stuck data bit shows there) and
+;                the test stops
 ;   1. SIZE      blocks 255..0 get their number at page 0 offset 0; the
 ;                first block that does not read back its own number is the
 ;                size (the block register is masked to the size, as on a
@@ -85,16 +87,26 @@ start:
         jsr     set_page
         sta     block
         jsr     set_block
+        lda     #1
+        sta     offs
         lda     #$A5
+        sta     expect
         sta     GEO_WIN+1
-        cmp     GEO_WIN+1
+        ldx     GEO_WIN+1
+        stx     got
+        cpx     #$A5
         bne     @none
         lda     #$5A
+        sta     expect
         sta     GEO_WIN+1
-        cmp     GEO_WIN+1
+        ldx     GEO_WIN+1
+        stx     got
+        cpx     #$5A
         beq     @present
-@none:
+@none:                                  ; print what came back
         PRINT   s_none
+        jsr     report
+        PRINT   s_none2
         jmp     halt
 
         ; 1. SIZE
@@ -502,7 +514,8 @@ s_title:   .byte 147, "georam test", CR
            .byte "window $de00, page $dffe, block $dfff", CR, CR, 0
 s_size:    .byte "size     ", 0
 s_blocks:  .byte " blocks ", 0
-s_none:    .byte "no georam: $de01 does not keep $a5 / $5a", CR, 0
+s_none:    .byte "no georam (or a bad data line):", 0
+s_none2:   .byte "$de01 must keep $a5 and $5a", CR, 0
 s_alias:   .byte "alias    ", 0
 s_pagereg: .byte "page reg ", 0
 s_march:   .byte "march    ", 0
