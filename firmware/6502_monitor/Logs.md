@@ -2,10 +2,20 @@
 
 ## 2026-11-01: ROM-less Banked RAM Peripheral, Bus Loop from RBL-XE, Serial Log, Bootstrap
 
+### C64 GeoRAM Checked Against Vera-Module-RBL-C64
+- **Same behaviour**: 256 KB, `$DE00-$DEFF` window, `$DFFE` page (`& $3F`), `$DFFF` block (`& $0F`, block 16 aliases block 0), write-only registers not driven on reads, decoded only at `$DFFE` / `$DFFF` (no `$DF80-$DFFD` mirrors), always enabled, zeroed at power-up and kept across a C64 reset, write sampled 300 ns after PHI2 rises.
+- **Different storage**: RBL-C64 runs on an ESP32-S3 with a static 256 KB array in DRAM; the ESP32 classic cannot hold that much `.bss`, hence DRAM + IRAM with 32-bit accesses here.
+- **Adopted their bus scheme**: instead of sampling at a fixed 200 ns after PHI2 rises, the loop polls /IO1 / /IO2 for at most `IO_QUALIFY_NS` (200 ns) and samples A0-A7 and drives the read byte as soon as one is LOW: the byte is on the bus earlier, with more margin before t_DSU.  On the ESP32 classic each poll is an APB read of `GPIO.in` (RBL-C64 uses the S3 dedicated GPIO, one sample every 5 instructions).
+
+### C64 GeoRAM: 256 KB with DRAM + IRAM
+- **Why 256 KB**: the official geoRAM was 512 KB only; later clones and VICE use powers of two (64 KB - 4 MB).  A 192 KB GeoRAM never existed and would break size detection, which writes a marker in block 0 and looks for where it aliases.  13 blocks (DRAM only) has the same problem, so the size is now a power of two (`GEORAM_KB`, default 256) and the block register is masked to it, as on the real hardware.
+- **Memory**: DRAM (~210 KB) is not enough for 256 KB.  The rest comes from the free IRAM (`MALLOC_CAP_EXEC`; `_iram_end` = 0x4008E348, ~71 KB up to 0x400A0000, 2 KB left to the system).  IRAM takes only 32-bit accesses, so the C64 loop reads with `l32i` + shift and writes with load / mask / `s32i` (DRAM pages too: one code path).  The load is inline assembly, so GCC cannot narrow it to `l8ui`; checked in the disassembly.  Banks are zeroed with 32-bit stores (`heap_caps_calloc` could use byte stores).  At 1 MHz the extra instructions cost nothing.
+- **Fallback**: if DRAM + IRAM hold less than `GEORAM_KB`, the largest power of two that fits (128 KB) is used; the banner prints the size, the DRAM / IRAM split and the free memory.  The Atari build is unchanged (DRAM only, 8-bit loads in the PHI1 assembly).
+
 ### Commodore 64 Build: GeoRAM Compatible (env `c64`)
 - **Map**: `-D BUS_C64=1`.  /IO1 `$DE00-$DEFF` = 256-byte RAM window, /IO2 `$DFFE` = page in the 16 KB block (bits 0-5), `$DFFF` = block; write-only registers, no latch, always enabled, the rest of IO2 not decoded.  Chosen over the Atari map so that GEOS and existing GeoRAM / NeoRAM software can run.
 - **Wiring**: /IO1 → J3 pin 12 (GPIO23, `~CCTL` input), /IO2 → J3 pin 11 (GPIO22, `~D1XX` input): the crossed wiring would also give a 256-byte IO1 window in the Atari map (the `$D1FF` protection lands on IO2).
-- **Size**: only whole 16 KB blocks, about 13 (~210 KB) instead of the 32 of a 512 KB GeoRAM; blocks beyond are not driven.  Software that needs the full 512 KB will not work; aliasing on a power-of-two size (as real GeoRAMs do) is not implemented.
+- **Size**: first version: only whole 16 KB blocks, about 13 (~210 KB), blocks beyond not driven; superseded by the 256 KB version above.
 - **Bus loop**: separate `MonitorTask` in plain C.  The VIC-II owns PHI1 (AEC low), so everything happens with PHI2 high: decode `BUS_ADDR_SETTLE_NS` = 200 ns after the rise, read byte driven until the fall (6510 needs it 100 ns before the fall, ~490 ns after the rise), write sampled `BUS_WR_SAMPLE_NS` = 300 ns after the rise (t_MDS <= 200 ns).  VIC-II DMA cycles do not assert /IO1 / /IO2.  Not measured yet.
 - **Log**: `RAM blk $bb pg $pp +$oo`, `GEORAM_PAGE`, `GEORAM_BLOCK`, `UNUSED`; page shown as `$DE` / `$DF`.
 

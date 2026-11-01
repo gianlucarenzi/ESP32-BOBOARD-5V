@@ -165,15 +165,19 @@ static_assert(PIN_A6 >= 21 && PIN_A6 <= 27 && PIN_A7 >= 21 && PIN_A7 <= 27,
 
 #if BUS_C64
 /*
- * C64: the VIC-II owns the bus during PHI1 (AEC low), so the 6510 address,
- * R/W and /IO1 / /IO2 are valid only while PHI2 is high (~490 ns at
- * 0.985 / 1.023 MHz).  Address and selects are sampled BUS_ADDR_SETTLE_NS
- * after PHI2 RISES; read data must be valid t_DSU (100 ns) before PHI2
- * falls; write data is valid t_MDS (<= 200 ns) after PHI2 rises.
+ * C64 (same scheme as Vera-Module-RBL-C64): the VIC-II owns the bus during
+ * PHI1 (AEC low), so the 6510 address, R/W and /IO1 / /IO2 are valid only
+ * while PHI2 is high (~490 ns at 0.985 / 1.023 MHz).  After PHI2 rises the
+ * loop polls /IO1 / /IO2 for at most IO_QUALIFY_NS; the PLA asserts them
+ * (a few tens of ns after the rise) only for CPU accesses, with the address
+ * already stable, so A0-A7 are sampled and a read byte driven at once.
+ * Read data must be valid t_DSU (100 ns) before PHI2 falls; write data is
+ * valid t_MDS (<= 200 ns) after PHI2 rises.
  */
-#ifndef BUS_ADDR_SETTLE_NS
-#define BUS_ADDR_SETTLE_NS 200u
+#ifndef IO_QUALIFY_NS
+#define IO_QUALIFY_NS 200u
 #endif
+#define BUS_ADDR_SETTLE_NS IO_QUALIFY_NS   // not used by the C64 loop
 #ifndef BUS_WR_SAMPLE_NS
 #define BUS_WR_SAMPLE_NS 300u
 #endif
@@ -283,8 +287,14 @@ static inline __attribute__((always_inline)) void dev_map(void)
  *         $DFFF        block (W)
  *   Both registers are write-only, as on the original GeoRAM (software keeps
  *   a copy); the rest of IO2 is not decoded.  RAM address = block * 16384 +
- *   page * 256 + offset.  Only whole 16 KB blocks are used: a block number
- *   beyond them selects no RAM (not driven, writes ignored).
+ *   page * 256 + offset.
+ * Size: GEORAM_KB (default 256 KB = 16 blocks), a power of two as on the
+ *   real GeoRAMs: the block register is masked to the size, so block 16
+ *   aliases block 0 (what size detection relies on).  The DRAM heap alone
+ *   holds ~210 KB, so the missing pages come from the free IRAM (~70 KB,
+ *   32-bit access only): every RAM access of the C64 loop is a 32-bit load
+ *   (and a read-modify-write for stores), which also works on DRAM.  If the
+ *   heap is short, the size drops to the next power of two (banner).
  * Wiring: /IO1 -> J3 pin 12 (GPIO23, the ~CCTL input), /IO2 -> J3 pin 11
  * (GPIO22, the ~D1XX input).
  */
@@ -296,19 +306,31 @@ static inline __attribute__((always_inline)) void dev_map(void)
 #define WIN_IO1 0           // log: page index of IO1 / IO2
 #define WIN_IO2 1
 
-static uint32_t geo_blocks;     // whole 16 KB blocks
+#ifndef GEORAM_KB
+#define GEORAM_KB 256u
+#endif
+#define GEO_IRAM_RESERVE (2u * 1024u)    // IRAM left to the system
+static_assert((GEORAM_KB & (GEORAM_KB - 1u)) == 0 && GEORAM_KB >= 16u && GEORAM_KB <= 4096u,
+              "GEORAM_KB: power of two, 16 KB - 4 MB");
+
+static uint32_t geo_blocks;     // 16 KB blocks, power of two (0: no RAM)
+static uint32_t geo_dram_pages; // pages carved from DRAM / IRAM (log)
+static uint32_t geo_iram_pages;
+static uint32_t geo_iram_left;  // free IRAM after the allocation (log)
 static uint8_t  geo_page;       // $DFFE
 static uint8_t  geo_block;      // $DFFF
 static uint8_t *geo_ram;        // RAM of the current page, NULL: no RAM
 
+// Page index, with the block masked to the size as on a real GeoRAM.
 static inline __attribute__((always_inline)) uint32_t geo_bank(void)
 {
-    return (uint32_t)geo_block * GEO_PAGES_PER_BLOCK + (geo_page & (GEO_PAGES_PER_BLOCK - 1u));
+    return (geo_block & (geo_blocks - 1u)) * GEO_PAGES_PER_BLOCK +
+           (geo_page & (GEO_PAGES_PER_BLOCK - 1u));
 }
 
 static inline __attribute__((always_inline)) void geo_map(void)
 {
-    geo_ram = (geo_block < geo_blocks) ? bank_tab[geo_bank()] : NULL;
+    geo_ram = geo_blocks ? bank_tab[geo_bank()] : NULL;
 }
 
 // GPIO.out word (D0-D7) for each byte value.
@@ -407,13 +429,54 @@ static void build_tables(void)
 }
 
 /*
- * Allocate the banks from the free DRAM heap.  Runs in setup(), before the
- * bus loop starts.
+ * Carve 256-byte banks from the heap regions with `caps` into tab[n..max),
+ * leaving `reserve` bytes free.  Zeroed with 32-bit stores (IRAM takes no
+ * byte stores).  Returns the new number of banks.
+ */
+static uint32_t carve_banks(uint8_t **tab, uint32_t n, uint32_t max, uint32_t caps,
+                            size_t reserve)
+{
+    while (n < max)
+    {
+        const size_t free    = heap_caps_get_free_size(caps);
+        const size_t largest = heap_caps_get_largest_free_block(caps);
+        if (free <= reserve)
+            break;
+        size_t want = free - reserve;
+        if (want > largest)
+            want = largest;
+        if (want > (max - n) * BANK_SIZE)
+            want = (max - n) * BANK_SIZE;
+        want &= ~(size_t)(BANK_SIZE - 1u);
+        if (want < BANK_MIN_CHUNK && want < (max - n) * BANK_SIZE)
+            break;
+        if (want == 0)
+            break;
+        uint8_t *chunk = (uint8_t *)heap_caps_malloc(want, caps);
+        if (!chunk)
+            break;
+        volatile uint32_t *w = (volatile uint32_t *)chunk;
+        for (size_t i = 0; i < want / 4u; i++)
+            w[i] = 0;
+        bank_chunks++;
+        for (size_t o = 0; o < want; o += BANK_SIZE)
+            tab[n++] = chunk + o;
+    }
+    return n;
+}
+
+/*
+ * Allocate the banks from the free heap.  Runs in setup(), before the bus
+ * loop starts.  Atari: every byte-addressable DRAM block.  C64: GEORAM_KB,
+ * DRAM first, then IRAM.
  */
 static void alloc_banks(void)
 {
     const uint32_t caps = MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL;
 
+#if BUS_C64
+    const uint32_t max_banks = GEORAM_KB * 1024u / BANK_SIZE;
+#else
     // Upper bound for the table: every free byte in banks, 4 bytes of table
     // per bank; the bank register is 16 bit.
     const size_t free0     = heap_caps_get_free_size(caps);
@@ -422,44 +485,31 @@ static void alloc_banks(void)
                                  : 0u;
     if (max_banks > 0xFFFFu)
         max_banks = 0xFFFFu;
+#endif
     uint8_t **tab = max_banks ? (uint8_t **)heap_caps_malloc(max_banks * sizeof(uint8_t *), caps)
                               : NULL;
-    uint32_t n = 0;
+    uint32_t n = tab ? carve_banks(tab, 0, max_banks, caps, BANK_HEAP_RESERVE) : 0u;
 
-    while (tab && n < max_banks)
-    {
-        const size_t free    = heap_caps_get_free_size(caps);
-        const size_t largest = heap_caps_get_largest_free_block(caps);
-        if (free <= BANK_HEAP_RESERVE)
-            break;
-        size_t want = free - BANK_HEAP_RESERVE;
-        if (want > largest)
-            want = largest;
-        if (want > (max_banks - n) * BANK_SIZE)
-            want = (max_banks - n) * BANK_SIZE;
-        want &= ~(size_t)(BANK_SIZE - 1u);
-        if (want < BANK_MIN_CHUNK)
-            break;
-        uint8_t *chunk = (uint8_t *)heap_caps_calloc(1, want, caps);
-        if (!chunk)
-            break;
-        bank_chunks++;
-        for (size_t o = 0; o < want; o += BANK_SIZE)
-            tab[n++] = chunk + o;
-    }
-
-    bank_tab       = tab;
-    bank_heap_left = heap_caps_get_free_size(caps);
+    bank_tab = tab;
 
 #if BUS_C64
-    geo_blocks = n / GEO_PAGES_PER_BLOCK;
-    if (geo_blocks > 256u)
-        geo_blocks = 256u;
+    geo_dram_pages = n;
+    if (tab)
+        n = carve_banks(tab, n, max_banks, MALLOC_CAP_EXEC, GEO_IRAM_RESERVE);
+    geo_iram_pages = n - geo_dram_pages;
+    geo_iram_left  = heap_caps_get_free_size(MALLOC_CAP_EXEC);
+
+    // Largest power of two of whole blocks that fits.
+    const uint32_t blocks = n / GEO_PAGES_PER_BLOCK;
+    geo_blocks = 0;
+    while ((geo_blocks ? geo_blocks * 2u : 1u) <= blocks)
+        geo_blocks = geo_blocks ? geo_blocks * 2u : 1u;
     geo_page  = 0;
     geo_block = 0;
     geo_map();
     n = geo_blocks * GEO_PAGES_PER_BLOCK;
 #endif
+    bank_heap_left = heap_caps_get_free_size(caps);
 
     dev.ctl         = CTL_NONE;
     dev.ram_size[0] = WIN_RAM_SIZE(WIN_D1XX);
@@ -625,10 +675,36 @@ BUS_INLINE uint8_t dev_flags(int win)
 // ============================================================================
 #if BUS_C64
 /*
- * C64 bus loop: everything happens while PHI2 is high.  PHI2 rises, wait
- * BUS_ADDR_SETTLE_NS for address and /IO1 / /IO2, decode; a read of IO1
- * drives the byte until PHI2 falls; a write is sampled BUS_WR_SAMPLE_NS
- * after the rise.  Plenty of time at 1 MHz: the decode is plain C.
+ * Byte access to a bank in DRAM or IRAM with 32-bit loads / stores only
+ * (IRAM raises LoadStoreError on 8-bit accesses).  The load is in assembly so
+ * that the compiler cannot narrow it to an l8ui.
+ */
+BUS_INLINE uint32_t ram_load32(const uint8_t *p)
+{
+    uint32_t v;
+    asm volatile("l32i %0, %1, 0" : "=r"(v) : "r"(p) : "memory");
+    return v;
+}
+
+BUS_INLINE uint8_t ram_read32(const uint8_t *ram, uint32_t off)
+{
+    return (uint8_t)(ram_load32(ram + (off & ~3u)) >> ((off & 3u) * 8u));
+}
+
+BUS_INLINE void ram_write32(uint8_t *ram, uint32_t off, uint8_t data)
+{
+    uint8_t *const p  = ram + (off & ~3u);
+    const uint32_t sh = (off & 3u) * 8u;
+    const uint32_t w  = (ram_load32(p) & ~(0xFFu << sh)) | ((uint32_t)data << sh);
+    asm volatile("s32i %0, %1, 0" : : "r"(w), "r"(p) : "memory");
+}
+
+/*
+ * C64 bus loop: everything happens while PHI2 is high.  PHI2 rises, poll
+ * /IO1 / /IO2 for at most IO_QUALIFY_NS (neither: not ours, or a VIC-II
+ * cycle); as soon as one is LOW sample A0-A7; a read of IO1 drives the byte
+ * at once and until PHI2 falls; a write is sampled BUS_WR_SAMPLE_NS after
+ * the rise.  Plenty of time at 1 MHz: the decode is plain C.
  */
 static void IRAM_ATTR MonitorTask(void *pvParameters)
 {
@@ -636,7 +712,7 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
     const uint32_t m_io1 = (1UL << PIN_IO1_N);
     const uint32_t m_io2 = (1UL << PIN_IO2_N);
 
-    const uint32_t settle    = NS_TO_CYCLES(BUS_ADDR_SETTLE_NS);
+    const uint32_t qualify   = NS_TO_CYCLES(IO_QUALIFY_NS);
     const uint32_t wr_sample = NS_TO_CYCLES(BUS_WR_SAMPLE_NS);
 
     uint32_t cyc_hi = 0;
@@ -668,8 +744,12 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             cyc_hi++;
         t_prev = t_rise;
 
-        wait_until(t_rise + settle);
-        const uint32_t lo = gpio_in();
+        // /IO1 or /IO2 within IO_QUALIFY_NS, else not ours (or VIC-II DMA).
+        const uint32_t t_limit = t_rise + qualify;
+        uint32_t lo;
+        while (((lo = gpio_in()) & (m_io1 | m_io2)) == (m_io1 | m_io2))
+            if ((int32_t)(cpu_ll_get_cycle_count() - t_limit) >= 0)
+                break;
         int win;
         if (!(lo & m_io1))
             win = WIN_IO1;
@@ -677,7 +757,7 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             win = WIN_IO2;
         else
         {
-            wait_phi2_low();            // not ours (or VIC-II DMA)
+            wait_phi2_low();
             continue;
         }
         const uint32_t off = decode_addr(lo, gpio_in1());
@@ -695,7 +775,7 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             const uint8_t *ram = geo_ram;
             if (win == WIN_IO1 && ram)
             {
-                const uint8_t v = ram[off];
+                const uint8_t v = ram_read32(ram, off);
                 gpio_out(drive_lut[v]);
                 bus_drive_enable();
                 pend.data  = v;
@@ -722,7 +802,7 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             if (win == WIN_IO1)
             {
                 if (geo_ram)
-                    geo_ram[off] = data;
+                    ram_write32(geo_ram, off, data);
             }
             else if (off == GEO_PAGE_REG)
             {
@@ -1088,16 +1168,20 @@ static void LogTask(void *arg)
         vTaskDelay(pdMS_TO_TICKS(1));
 
 #if BUS_C64
-    log_line("\n[6502_monitor] GeoRAM on the C64 expansion port: %lu blocks x 16 KB = %lu KB\n",
-             (unsigned long)geo_blocks, (unsigned long)(geo_blocks * 16u));
-    log_line("[6502_monitor] IO1 $DE00-$DEFF RAM, IO2 $DFFE page, $DFFF block (write-only); "
-             "%lu heap blocks, %lu bytes of heap left\n",
-             (unsigned long)bank_chunks, (unsigned long)bank_heap_left);
+    log_line("\n[6502_monitor] GeoRAM on the C64 expansion port: %lu KB = %lu blocks x 16 KB%s\n",
+             (unsigned long)(geo_blocks * 16u), (unsigned long)geo_blocks,
+             (geo_blocks * 16u < GEORAM_KB) ? " (heap too small for GEORAM_KB)" : "");
+    log_line("[6502_monitor] Pages: %lu in DRAM, %lu in IRAM, %lu heap blocks; "
+             "left %lu bytes DRAM, %lu bytes IRAM\n",
+             (unsigned long)geo_dram_pages, (unsigned long)geo_iram_pages,
+             (unsigned long)bank_chunks, (unsigned long)bank_heap_left,
+             (unsigned long)geo_iram_left);
+    log_line("[6502_monitor] IO1 $DE00-$DEFF RAM, IO2 $DFFE page, $DFFF block (write-only)\n");
     log_line("[6502_monitor] /IO1 on J3 pin 12 (GPIO%u), /IO2 on J3 pin 11 (GPIO%u)\n",
              (unsigned)PIN_IO1_N, (unsigned)PIN_IO2_N);
-    log_line("[6502_monitor] Bus loop on Core 1 (decode %u ns, write sample %u ns after PHI2 "
-             "rises), log %u baud\n",
-             (unsigned)BUS_ADDR_SETTLE_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
+    log_line("[6502_monitor] Bus loop on Core 1 (/IOx within %u ns, write sample %u ns after "
+             "PHI2 rises), log %u baud\n",
+             (unsigned)IO_QUALIFY_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
 #else
     const uint32_t banks = dev_count();
     log_line("\n[6502_monitor] Banked RAM PBI / CCTL peripheral, device ID $%02X\n",

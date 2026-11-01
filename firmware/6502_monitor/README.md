@@ -110,17 +110,26 @@ the C64 expansion port (`-D BUS_C64=1`):
 
 Always enabled, no latch; the registers are write-only as on the original
 GeoRAM (software keeps a copy) and the rest of IO2 is not decoded.  RAM
-address = block × 16384 + page × 256 + offset.  Only whole 16 KB blocks are
-used (about 13 with ~210 KB of heap, printed at boot): a block beyond them
-is not driven and writes are ignored, while a real 512 KB GeoRAM has 32
-blocks.  Software that requires 512 KB will not work.
+address = block × 16384 + page × 256 + offset.
 
-The VIC-II owns the bus during PHI1, so the C64 loop decodes while PHI2 is
-high: address, R/W and /IO1 / /IO2 sampled `BUS_ADDR_SETTLE_NS` (default
-200 ns) after PHI2 rises, read data driven until PHI2 falls (needed 100 ns
-before the fall, ~490 ns after the rise), write data sampled
-`BUS_WR_SAMPLE_NS` (default 300 ns) after the rise.  Timing to be measured
-on the real bus.
+**Size: 256 KB (16 blocks)** by default, `-D GEORAM_KB=...` for another power
+of two.  As on a real GeoRAM the block register is masked to the size, so
+block 16 aliases block 0: size detection sees a 256 KB GeoRAM (VICE has the
+same size).  The DRAM heap alone holds ~210 KB, so the remaining pages come
+from the free IRAM (~70 KB, 32-bit access only): every RAM access of the C64
+loop is a 32-bit load, and a read-modify-write for stores.  If the heap
+turns out to be too small, the size drops to 128 KB and the banner says so.
+The original geoRAM was 512 KB: software that needs exactly that will not
+work.
+
+The VIC-II owns the bus during PHI1, so the C64 loop works while PHI2 is
+high, with the scheme of Vera-Module-RBL-C64: after PHI2 rises it polls
+/IO1 / /IO2 for at most `IO_QUALIFY_NS` (default 200 ns; the PLA asserts
+them only for CPU accesses, with the address already stable), samples A0-A7
+as soon as one is LOW and drives a read byte at once, until PHI2 falls
+(needed 100 ns before the fall, ~490 ns after the rise).  Write data is
+sampled `BUS_WR_SAMPLE_NS` (default 300 ns) after the rise.  Timing to be
+measured on the real bus.
 
 Wiring (the C64 port pins are from the standard pinout: check them against
 your schematic before soldering):

@@ -62,7 +62,7 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - **One latch at a time**: `$80` to $D1FF puts the registers in $D1xx and the RAM in $D500–$D5FF (256 bytes); `$80` to $D5FF puts the registers in $D5xx and the RAM in $D100–$D1FE (255 bytes: $D1FF, the PBI register, is protected unless built with `D1FF_RAM=1`); when deselected it never drives the bus
 - **Register page**: bank count at $xxFB–$xxFC (read-only), 16-bit bank register at $xxFD–$xxFE, latch at $xxFF (bit 7, device ID `$80`)
 - **Banks from the heap**: at boot the firmware takes the free ESP32 DRAM in 256-byte banks, one RAM for both modes (estimated 200–230 KB, the exact value is printed at boot)
-- **Commodore 64 (`c64` env)**: the same board on the expansion port as a GeoRAM-compatible expansion: RAM window in IO1 $DE00–$DEFF, page in $DFFE and 16 KB block in $DFFF (write-only); /IO1 on J3 pin 12, /IO2 on J3 pin 11; about 13 blocks (210 KB) instead of the 32 of a 512 KB GeoRAM
+- **Commodore 64 (`c64` env)**: the same board on the expansion port as a GeoRAM-compatible expansion: RAM window in IO1 $DE00–$DEFF, page in $DFFE and 16 KB block in $DFFF (write-only); /IO1 on J3 pin 12, /IO2 on J3 pin 11; 256 KB (16 blocks, aliased like a real GeoRAM: ~210 KB from DRAM, the rest from the ESP32 IRAM)
 - **No ROM, no MPD / EXTSEL**: every bus pin is an input, D0–D7 become outputs only to answer a read
 - **Dual-core**: Core 1 owns the bus (interrupts masked, decode during PHI1), Core 0 prints the log
 - **Lock-free log** (Core 1 → Core 0): every access to both pages and every latch change, with microsecond timestamps
