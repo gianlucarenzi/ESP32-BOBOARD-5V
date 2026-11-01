@@ -2,7 +2,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
 \usepackage{geometry}
-\geometry{margin=1in}
+\geometry{margin=0.8in}
 \usepackage{booktabs}
 
 \title{6502 Monitor -- ESP32 Pin Mapping (NodeMCU DevKit V1)}
@@ -46,6 +46,16 @@ SEL\_N & GPIO 22 & D22      & IN  & \$D1XX / CCTL selection (Active Low) \\
 ROMSEL & GPIO 23 & D23      & IN  & \$D800--\$DFFF range (Active Low) \\
 EXTSEL & GPIO 3  & \textbf{RX0}  & OUT & Disable Atari internal memory (Active Low) \\
 MPD    & GPIO 0  & \textbf{BOOT} & OUT & Math Pack Disable (Active Low) \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\section{Serial Debug}
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Signal} & \textbf{GPIO} & \textbf{Label} & \textbf{Description} \\ \midrule
+TX & GPIO 1 & TX0 & Console output (115200\,bps, \texttt{LOG\_BAUD}) \\ \bottomrule
 \end{tabular}
 \end{table}
 
