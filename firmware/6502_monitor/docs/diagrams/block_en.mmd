@@ -1,0 +1,19 @@
+flowchart TD
+    A[ESP32 NodeMCU] --> B[TXS0108E U1]
+    A --> C[TXS0108E U3]
+    A --> D[TXS0108E U4]
+
+    B --> E[PHI2, R/W, D0-D3, D6]
+    C --> F[D7, A4, A6, A7, ~D1XX, ~CCTL]
+    D --> G[A0-A3, A5, D4, D5]
+
+    E --> H[J3 - 6502 System]
+    F --> H
+    G --> H
+
+    I[USB-C] --> A
+    J[Pin Headers] --> A
+
+    style A fill:#e1f5fe
+    style H fill:#f3e5f5
+    style I fill:#e8f5e8

@@ -1,0 +1,22 @@
+sequenceDiagram
+    participant CPU as 6502 CPU
+    participant ESP as ESP32 MonitorTask
+    participant L  as Log ring
+
+    CPU->>ESP: Write $80 → $D1FF
+    ESP->>ESP: selezionato (bit 7 = 1)
+    ESP->>L: PBI_SELECT SELECTED
+
+    CPU->>ESP: Write $03 → $D1FD, $00 → $D1FE
+    ESP->>ESP: banco = $0003
+    loop Accessi $D500-$D5FF
+        CPU->>ESP: STA $D5xx
+        ESP->>ESP: ram[3][xx] = dato
+        CPU->>ESP: LDA $D5xx
+        ESP->>CPU: pilota ram[3][xx] su D0-D7
+        ESP->>L: evento R/W
+    end
+
+    CPU->>ESP: Write $00 → $D1FF
+    ESP->>ESP: deselezionato, bus mai pilotato
+    ESP->>L: PBI_SELECT DESELECTED

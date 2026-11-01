@@ -1,0 +1,26 @@
+flowchart TD
+    A[Avvio: tutti i pin del bus in ingresso] --> B[LogTask su Core 0]
+    A --> C[MonitorTask su Core 1, interrupt mascherati]
+    C --> D[PHI2 scende: rilascia D0-D7, log del ciclo precedente]
+    D --> E[Attesa BUS_ADDR_SETTLE_NS]
+    E --> F[Campiona A0-A7, R/W, ~D1XX, ~CCTL]
+    F --> G{Lettura della finestra RAM o di un registro?}
+    G -->|Sì| H[Byte in GPIO.out, uscite spente]
+    G -->|No| I[Nessuna uscita]
+    H --> J[PHI2 sale: accende D0-D7]
+    I --> K[PHI2 sale]
+    J --> L[Attesa discesa PHI2]
+    K --> M{Scrittura?}
+    M -->|Sì $D1FF| N[Latch con il bit 7]
+    M -->|Sì $D1FD-$D1FE| Q[Cambia banco se selezionato]
+    M -->|Sì $D5xx| O[Salva in RAM se selezionato]
+    M -->|No| P[Campiona il dato letto per il log]
+    N --> L
+    Q --> L
+    O --> L
+    P --> L
+    L --> D
+
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8

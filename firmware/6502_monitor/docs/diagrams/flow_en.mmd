@@ -1,0 +1,26 @@
+flowchart TD
+    A[Start: every bus pin is an input] --> B[LogTask on Core 0]
+    A --> C[MonitorTask on Core 1, interrupts masked]
+    C --> D[PHI2 falls: release D0-D7, log previous cycle]
+    D --> E[Wait BUS_ADDR_SETTLE_NS]
+    E --> F[Sample A0-A7, R/W, ~D1XX, ~CCTL]
+    F --> G{Read of the RAM window or of a register?}
+    G -->|Yes| H[Byte into GPIO.out, outputs off]
+    G -->|No| I[No outputs]
+    H --> J[PHI2 rises: turn D0-D7 on]
+    I --> K[PHI2 rises]
+    J --> L[Wait for PHI2 to fall]
+    K --> M{Write?}
+    M -->|Yes $D1FF| N[Latch from bit 7]
+    M -->|Yes $D1FD-$D1FE| Q[Switch bank if selected]
+    M -->|Yes $D5xx| O[Store in RAM if selected]
+    M -->|No| P[Sample the read byte for the log]
+    N --> L
+    Q --> L
+    O --> L
+    P --> L
+    L --> D
+
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8

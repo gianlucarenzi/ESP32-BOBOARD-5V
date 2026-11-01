@@ -161,27 +161,7 @@ View 3D models directly in your browser:
 
 ### Block Diagram
 
-```mermaid
-flowchart TD
-    A[ESP32 NodeMCU] --> B[TXS0108E U1]
-    A --> C[TXS0108E U3]
-    A --> D[TXS0108E U4]
-
-    B --> E[PHI2, R/W, D0-D3, D6]
-    C --> F[D7, A4, A6, A7, ~D1XX, ~CCTL]
-    D --> G[A0-A3, A5, D4, D5]
-
-    E --> H[J3 - 6502 System]
-    F --> H
-    G --> H
-
-    I[USB-C] --> A
-    J[Pin Headers] --> A
-
-    style A fill:#e1f5fe
-    style H fill:#f3e5f5
-    style I fill:#e8f5e8
-```
+![Block diagram](firmware/6502_monitor/docs/diagrams/block_en.png)
 
 ### Level Shifting
 
@@ -393,61 +373,11 @@ Timestamp format is `[seconds.microseconds]`:
 
 ### Main Monitor Flow
 
-```mermaid
-flowchart TD
-    A[Start: every bus pin is an input] --> B[LogTask on Core 0]
-    A --> C[MonitorTask on Core 1, interrupts masked]
-    C --> D[PHI2 falls: release D0-D7, log previous cycle]
-    D --> E[Wait BUS_ADDR_SETTLE_NS]
-    E --> F[Sample A0-A7, R/W, ~D1XX, ~CCTL]
-    F --> G{Read of the RAM window or of a register?}
-    G -->|Yes| H[Byte into GPIO.out, outputs off]
-    G -->|No| I[No outputs]
-    H --> J[PHI2 rises: turn D0-D7 on]
-    I --> K[PHI2 rises]
-    J --> L[Wait for PHI2 to fall]
-    K --> M{Write?}
-    M -->|Yes $D1FF| N[Latch from bit 7]
-    M -->|Yes $D1FD-$D1FE| Q[Switch bank if selected]
-    M -->|Yes $D5xx| O[Store in RAM if selected]
-    M -->|No| P[Sample the read byte for the log]
-    N --> L
-    Q --> L
-    O --> L
-    P --> L
-    L --> D
-
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style C fill:#e8f5e8
-```
+![Main monitor flow](firmware/6502_monitor/docs/diagrams/flow_en.png)
 
 ### Select Protocol (PBI)
 
-```mermaid
-sequenceDiagram
-    participant CPU as 6502 CPU
-    participant ESP as ESP32 MonitorTask
-    participant L  as Log ring
-
-    CPU->>ESP: Write $80 → $D1FF
-    ESP->>ESP: selected (bit 7 = 1)
-    ESP->>L: PBI_SELECT SELECTED
-
-    CPU->>ESP: Write $03 → $D1FD, $00 → $D1FE
-    ESP->>ESP: bank = $0003
-    loop Accesses $D500-$D5FF
-        CPU->>ESP: STA $D5xx
-        ESP->>ESP: ram[3][xx] = data
-        CPU->>ESP: LDA $D5xx
-        ESP->>CPU: drive ram[3][xx] on D0-D7
-        ESP->>L: R/W event
-    end
-
-    CPU->>ESP: Write $00 → $D1FF
-    ESP->>ESP: deselected, bus never driven
-    ESP->>L: PBI_SELECT DESELECTED
-```
+![Select protocol](firmware/6502_monitor/docs/diagrams/select_en.png)
 
 ## ⏱️ Timing
 
