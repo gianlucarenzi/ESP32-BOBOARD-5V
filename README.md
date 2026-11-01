@@ -381,7 +381,6 @@ Il formato è `[secondi.microsecondi]`:
 [    1.234680] [D505 - RAM bank $0103 +$05 ] R $AA  SEL DRV
 [    1.300000] [D105 - RESERVED            ] R $FF  SEL
 ```
-```
 
 - `PBI_SELECT` — scrittura del latch e nuovo stato: `SELECTED` / `DESELECTED`
 - `SEL` = dispositivo selezionato, `DRV` = byte pilotato dal dispositivo, `-` = non selezionato (il byte è quello presente sul bus)

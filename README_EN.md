@@ -381,7 +381,6 @@ Timestamp format is `[seconds.microseconds]`:
 [    1.234680] [D505 - RAM bank $0103 +$05 ] R $AA  SEL DRV
 [    1.300000] [D105 - RESERVED            ] R $FF  SEL
 ```
-```
 
 - `PBI_SELECT` — latch write and new state: `SELECTED` / `DESELECTED`
 - `SEL` = device selected, `DRV` = byte driven by the device, `-` = not selected (the byte is whatever was on the bus)
