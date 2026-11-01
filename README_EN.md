@@ -43,7 +43,7 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - Monitoring and debugging 6502 systems
 - PBI peripheral implementation for Atari
 - Data/address bus traffic analysis
-- External ROM and RAM emulation
+- Register-based peripheral emulation ($D1xx / $D5xx)
 - Smart cartridge development
 
 ## ✨ Key Features
@@ -58,12 +58,11 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - **Status LEDs** and control buttons
 
 ### Firmware
-- **PBI ROM Emulator** ($D800–$DFFF, 2 KB — full A0-A10 decode, no aliasing)
-- **Dual-core processing** (Core 0: Serial/Log, Core 1: Monitor bus)
-- **MPD** asserted on ROMSEL access
-- **EXTSEL** asserted on $D1XX access when internal latch is active
-- **Internal latch** controlled via $D1FF write ($80 = enable, $00 = disable)
-- **FreeRTOS queue** (Core 1 → Core 0): logs VCS latch state changes and every $D100–$D1FE access with microsecond timestamps
+- **ROM-less PBI / CCTL peripheral**: windows $D100–$D1FF (`~D1XX`) and $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
+- **Select latch** per window at $D1FF / $D5FF (bit 7, device ID `$80`): while selected it stores writes and answers reads of $xx00–$xxFE, when not selected it never drives the bus
+- **No ROM, no MPD / EXTSEL**: every bus pin is an input, D0–D7 become outputs only to answer a read
+- **Dual-core**: Core 1 owns the bus (interrupts masked, decode during PHI1), Core 0 prints the log
+- **Lock-free log** (Core 1 → Core 0): every access to both windows and every latch change, with microsecond timestamps
 
 ## 🔧 Technical Specifications
 
@@ -87,13 +86,13 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 | **D0-D7** | GPIO4, GPIO5, GPIO13, GPIO14, GPIO16, GPIO17, GPIO18, GPIO19 | Data Bus (Bidirectional) |
 | **A0-A3** | GPIO34, GPIO35, GPIO36, GPIO39 | Address Bus LSB (Input Only) |
 | **A4-A7** | GPIO32, GPIO33, GPIO21, GPIO27 | Address Bus |
-| **A8-A10** | GPIO12, GPIO25, GPIO26 | Address Bus (full 2 KB decode) |
-| **PHI2** | GPIO2 | 6502 clock (1.79 MHz) |
+| **PHI2** | GPIO2 | 6502 Clock (1.79 MHz) |
 | **R/W** | GPIO15 | Read/Write |
-| **SEL_N** | GPIO22 | $D1XX / CCTL selection (Active Low, Input) |
-| **ROMSEL** | GPIO23 | $D800–$DFFF range (Active Low, Input) |
-| **EXTSEL** | GPIO3 (RX0) | Disable Atari internal memory (Active Low, Output) |
-| **MPD** | GPIO0 (BOOT) | Math Pack Disable (Active Low, Output) |
+| **~D1XX** | GPIO22 | $D100–$D1FF window, from the MMU/PLA (Active Low, Input) |
+| **~CCTL** | GPIO23 | $D500–$D5FF window, from the MMU/PLA (Active Low, Input) |
+| **TX debug** | GPIO1 | Serial console 115200 bps (also on J4 pin 3) |
+
+Not used by the firmware: GPIO12 (still wired to U1 / J3 pin 4, strapping pin), GPIO25 and GPIO26 (free TXS0108E channels), GPIO0 and GPIO3 (not routed to J3).
 
 ## 🎨 3D Visualization
 
@@ -161,22 +160,21 @@ View 3D models directly in your browser:
 
 ```mermaid
 flowchart TD
-    A[ESP32 NodeMCU] --> B[TXS0108E #1]
-    A --> C[TXS0108E #2] 
-    A --> D[TXS0108E #3]
-    
-    B --> E[Data Bus D0-D7]
-    C --> F[Address Bus A0-A7]
-    D --> G[Address A8-A10 + Controls]
-    
-    E --> H[6502 System]
+    A[ESP32 NodeMCU] --> B[TXS0108E U1]
+    A --> C[TXS0108E U3]
+    A --> D[TXS0108E U4]
+
+    B --> E[PHI2, R/W, D0-D3, D6]
+    C --> F[D7, A4, A6, A7, ~D1XX, ~CCTL]
+    D --> G[A0-A3, A5, D4, D5]
+
+    E --> H[J3 - 6502 System]
     F --> H
     G --> H
-    
+
     I[USB-C] --> A
     J[Pin Headers] --> A
-    K[PBI Connector] --> H
-    
+
     style A fill:#e1f5fe
     style H fill:#f3e5f5
     style I fill:#e8f5e8
@@ -184,11 +182,13 @@ flowchart TD
 
 ### Level Shifting
 
-The board uses three TXS0108E to ensure compatibility between ESP32's 3.3V logic levels and the 6502 system's 5V:
+The board uses three TXS0108E to ensure compatibility between ESP32's 3.3V logic levels and the 6502 system's 5V.  The channels follow the module pins, not the functions:
 
-- **TXS0108E #1**: Data Bus D0-D7 (bidirectional)
-- **TXS0108E #2**: Address Bus A0-A7
-- **TXS0108E #3**: Address Bus A8-A10 + control signals (PHI2, R/W, SEL\_N, ROMSEL, EXTSEL, MPD)
+- **U1**: PHI2 (GPIO2), D0 (GPIO4), D1 (GPIO5), GPIO12 (unused), D2 (GPIO13), D3 (GPIO14), R/W (GPIO15), D6 (GPIO18)
+- **U3**: D7 (GPIO19), A6 (GPIO21), ~D1XX (GPIO22), ~CCTL (GPIO23), GPIO25 and GPIO26 (free), A7 (GPIO27), A4 (GPIO32)
+- **U4**: A5 (GPIO33), A0 (GPIO34), A1 (GPIO35), A2 (GPIO36), A3 (GPIO39), D4 (GPIO16), D5 (GPIO17); channel 8 free
+
+`TXS_EN` (OE of all three) is held high by R1/R3/R4; SW1 pulls it to GND to isolate the ESP32 from the bus.
 
 ## 💻 Firmware
 
@@ -196,62 +196,33 @@ The board uses three TXS0108E to ensure compatibility between ESP32's 3.3V logic
 
 The firmware is based on FreeRTOS and uses both ESP32 cores:
 
-- **Core 0**: Serial communication and debug management
-- **Core 1**: High-speed 6502 bus monitoring
+- **Core 0**: `LogTask`, the only writer on Serial
+- **Core 1**: IRAM-resident `MonitorTask`, with interrupts masked and the interrupt watchdog disabled, owns the 6502 bus
 
 ### Main Features
 
-#### 1. 6502 Bus Monitoring
-```cpp
-// Optimized address bus reading
-static inline uint16_t read_address_bus(void) {
-    uint32_t gpio_low = read_gpio_low();
-    uint32_t gpio_high = read_gpio_high();
-    // Bit combination to reconstruct 16-bit address
-    return address_reconstruction;
-}
-```
+#### 1. Bus cycle
 
-#### 2. PBI Implementation
+- **PHI1**: 200 ns after PHI2 falls (`BUS_ADDR_SETTLE_NS`) it samples A0–A7, R/W, `~D1XX` and `~CCTL`; for a read of a selected register it writes the byte to `GPIO.out` with the outputs still off
+- **PHI2 rising edge**: one store turns D0–D7 on; if the select shows up only on the rising edge, the byte is driven late
+- **Write**: data sampled 120 ns after PHI2 rises (`BUS_WR_SAMPLE_NS`)
+- **PHI2 falling edge**: D0–D7 released; the cycle's event goes to the log during the next PHI1
+
+#### 2. PBI / CCTL Implementation
 
 | Address Range | Function | Notes |
 |----------------|----------|-------|
-| **$D100–$D11F** | VERA registers (accessed via EXTSEL) | Latch must be active |
-| **$D1FF** | Latch control (W: $80=on, $00=off) | PBI mode only |
-| **$D800–$DFFF** | PBI ROM 2 KB — VERA X16 driver | A0-A10 decoded, no aliasing |
+| **$D100–$D1FE** | Registers (256 bytes) | Read and write only while the device is selected |
+| **$D1FF** | Select latch (W: bit 7) | Never driven on reads (PBI IRQ status) |
+| **$D500–$D5FE** | CCTL registers (256 bytes) | As above, separate latch |
+| **$D5FF** | CCTL select latch (W: bit 7) | Never driven on reads |
 
-#### 3. 6502 ROM Sources
-
-| File | Description |
-|------|-------------|
-| `6502/src/vera_pbi_handler.s` | PBI ROM driver for the VERA X16 card. Standard Earl Rice header ($D800–$D81C), CIO handler, OPEN/CLOSE/GET/PUT/STATUS/SPECIAL vectors, VERA init. |
-| `6502/src/vera_common.inc` | Shared symbols: VERA register addresses (`VERA_ADDR_L/M/H`, `VERA_DATA0/1`, `VERA_CTRL`, …), PBI constants (`PBI_ADDR=$D100`, `PBI_LATCH=$D1FF`), screen layout. |
-| `6502/pbi-driver.ld` | Linker script: `ROM` segment origin `$D800`, size `$0800` (2 KB). |
-| `include/pbi-driver.h` | C array `pbi_driver[]` auto-generated by the Makefile — do not edit manually. |
-
-### Operating Modes
-
-#### PBI Mode (Default)
-```ini
--D BUS_MODE=0  ; BUS_MODE_PBI
-```
-- Atari PBI device emulation
-- ROMSEL ($D800–$DFFF): asserts MPD, serves ROM bytes on reads (A0-A10)
-- SEL_N ($D1XX): asserts EXTSEL when latch is active
-- VCS latch: enabled by writing `$80` to $D1FF, disabled by `$00`
-
-#### CCTL Mode (Cartridge)
-```ini
--D BUS_MODE=1  ; BUS_MODE_CCTL
-```
-- Simplified Cartridge Control mode
-- Latch always active (EXTSEL always asserted on $D1XX)
-- $D1FF is not treated as latch control
+The registers are written only by the Atari (power-up value `$00`).  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF.
 
 ## 🚀 Installation and Setup
 
 ### Hardware Requirements
-- ESP32 NodeMCU (38 pin)
+- ESP32 NodeMCU DevKit V1 (30 pins, ESP32-WROOM-32)
 - USB-C cable for programming
 - Target 6502 system (e.g. Atari 130XE)
 - Bus connections according to pinout
@@ -269,16 +240,24 @@ git clone https://github.com/gianlucarenzi/esp32-boboard-5v.git
 cd ESP32-BOBOARD-5V/firmware/6502_monitor
 ```
 
-2. **PlatformIO configuration**:
+2. **PlatformIO configuration** (excerpt of `platformio.ini`):
 ```ini
+[env]
+extra_scripts = post:efuse_vdd_sdio.py
+monitor_rts = 0
+monitor_dtr = 0
+custom_efuse_vdd_sdio = 3.3V
+
 [env:nodemcu-32s]
-platform = espressif32
+platform = espressif32@6.6.0
 board = nodemcu-32s
 framework = arduino
 monitor_speed = 115200
-board_build.f_cpu = 240000000
 upload_speed = 921600
+board_build.f_cpu = 240000000
 ```
+
+The module is **always programmed disconnected from the Atari**, connected only to the PC.  Before every upload `efuse_vdd_sdio.py` checks the VDD_SDIO efuses and, if they are blank, burns them to 3.3 V (**irreversible**), so GPIO12 is no longer sampled at reset.
 
 3. **Compilation and upload**:
 ```bash
@@ -304,25 +283,25 @@ pio device monitor
 
 ### Serial Output
 
-Core 0 drains the FreeRTOS queue sent by Core 1 and prints each event.
+Core 0 prints every event that Core 1 records in a lock-free ring buffer.
 Timestamp format is `[seconds.microseconds]`:
 
 ```
-[6502_monitor] PBI ROM Emulator booting...
-[6502_monitor] Running.
-[6502_monitor] VCS=OFF  Latch=DISABLED
-[    0.012345] [VCS ] Latch ENABLED  ($80 written to $D1FF)
-[    0.012346] [D100 - VERA_ADDR_L          ] R $00
-[    0.012390] [D103 - VERA_DATA0           ] W $FF
-[    1.234567] [D104 - VERA_DATA1           ] W $00
-[    1.234600] [VCS ] Latch DISABLED ($00 written to $D1FF)
+[6502_monitor] ROM-less PBI / CCTL peripheral, device ID $80
+[6502_monitor] Windows $D100-$D1FE (select $D1FF), $D500-$D5FE (select $D5FF)
+[6502_monitor] Bus loop on Core 1 (settle 200 ns, write sample 120 ns), log 115200 baud
+[    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
+[    1.234601] [D105 - VERA_CTRL           ] W $04  SEL
+[    1.234640] [D105 - VERA_CTRL           ] R $04  SEL DRV
+[    1.300000] [D500 - VERA_ADDR_L         ] R $FF  -
 ```
 
-- `[VCS ]` — latch state change: `ENABLED` / `DISABLED`
-- `[D1xx - REG_NAME]` — VERA register access with symbolic name: `R` = read, `W` = write
-- Registers $09–$0C are muxed by DCSEL: the logger shadows every write to `VERA_CTRL` ($D105, bits [2:1]) to resolve the correct name
-- Timestamp captured in Core 1 at the exact bus cycle (`esp_timer_get_time()`)
-- Events dropped when queue is full — the bus handler is never blocked
+- `PBI_SELECT` / `CCTL_SELECT` — latch write and new state: `SELECTED` / `DESELECTED`
+- `SEL` = device selected in that window, `DRV` = byte driven by the device, `-` = not selected (the byte is whatever was on the bus)
+- Registers $00–$1A are shown with their VERA names; $09–$0C are resolved through DCSEL (bits [2:1] of the last write to offset $05)
+- Timestamps come from the Core 1 cycle counter (CCOUNT extended to 64 bit)
+- Each line is a single `Serial.write()`: lines never interleave; events lost when the ring is full are counted
+- Read-only debug also on J4: GND (pin 1) and TX0 (pin 3, 3.3 V); leave RX0 (pin 2) unconnected
 
 ## 📈 Flow Diagrams
 
@@ -330,66 +309,54 @@ Timestamp format is `[seconds.microseconds]`:
 
 ```mermaid
 flowchart TD
-    A[System Startup] --> B[Init GPIO + Drive LUT]
-    B --> C[Create FreeRTOS Queue]
-    C --> D[Start MonitorTask on Core 1]
-    D --> E[Core 0: loop drains queue and Serial.printf]
-    D --> F[Core 1: wait PHI2 rising edge]
-
-    F --> G[Sample GPIO.in / GPIO.in1]
-    G --> H[Decode address A0-A10 and R/W]
-    H --> I{ROMSEL active?}
-
-    I -->|Yes D800-DFFF| J[Assert MPD]
-    J --> K{R/W = Read?}
-    K -->|Yes| L[bus_drive pbi_rom addr]
-    K -->|No| M[no data action]
-
-    I -->|No| N{SEL_N active?}
-    N -->|Yes D1XX| O{latch active?}
-    O -->|Yes| P[Assert EXTSEL]
-    O -->|No| Q[EXTSEL released]
-    P --> R{offset = $FF and Write?}
-    Q --> R
-    R -->|Yes PBI latch| S[Update latch, log EVT_LATCH if changed]
-    R -->|No D100-D1FE| T[log EVT_REG with R/W and data]
-    N -->|No| U[EXTSEL released]
-
-    L --> V[Wait PHI2 falling edge]
-    M --> V
-    S --> V
-    T --> V
-    U --> V
-    V --> W[bus_release]
-    W --> F
+    A[Start: every bus pin is an input] --> B[LogTask on Core 0]
+    A --> C[MonitorTask on Core 1, interrupts masked]
+    C --> D[PHI2 falls: release D0-D7, log previous cycle]
+    D --> E[Wait BUS_ADDR_SETTLE_NS]
+    E --> F[Sample A0-A7, R/W, ~D1XX, ~CCTL]
+    F --> G{Read of a selected register?}
+    G -->|Yes| H[Byte into GPIO.out, outputs off]
+    G -->|No| I[No outputs]
+    H --> J[PHI2 rises: turn D0-D7 on]
+    I --> K[PHI2 rises]
+    J --> L[Wait for PHI2 to fall]
+    K --> M{Write to a window?}
+    M -->|Yes $xxFF| N[Update the latch from bit 7]
+    M -->|Yes $xx00-$xxFE| O[Store the register if selected]
+    M -->|No| P[Sample the read byte for the log]
+    N --> L
+    O --> L
+    P --> L
+    L --> D
 
     style A fill:#e1f5fe
-    style E fill:#f3e5f5
-    style F fill:#e8f5e8
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
 ```
 
-### VCS Latch Protocol (PBI Mode)
+### Select Protocol (PBI)
 
 ```mermaid
 sequenceDiagram
     participant CPU as 6502 CPU
     participant ESP as ESP32 MonitorTask
-    participant Q  as FreeRTOS Queue
+    participant L  as Log ring
 
     CPU->>ESP: Write $80 → $D1FF
-    ESP->>ESP: latch_active = true
-    ESP->>ESP: Assert EXTSEL (LOW)
-    ESP->>Q: EVT_LATCH ENABLED (timestamp µs)
+    ESP->>ESP: selected (bit 7 = 1)
+    ESP->>L: PBI_SELECT SELECTED
 
-    loop VERA register accesses $D100-$D1FE
-        CPU->>ESP: Read/Write $D1xx
-        ESP->>Q: EVT_REG offset data R/W (timestamp µs)
+    loop Accesses $D100-$D1FE
+        CPU->>ESP: STA $D1xx
+        ESP->>ESP: store reg[xx]
+        CPU->>ESP: LDA $D1xx
+        ESP->>CPU: drive reg[xx] on D0-D7
+        ESP->>L: R/W event
     end
 
     CPU->>ESP: Write $00 → $D1FF
-    ESP->>ESP: latch_active = false
-    ESP->>ESP: Release EXTSEL (HIGH)
-    ESP->>Q: EVT_LATCH DISABLED (timestamp µs)
+    ESP->>ESP: deselected, bus never driven
+    ESP->>L: PBI_SELECT DESELECTED
 ```
 
 ## ⏱️ Timing
@@ -432,10 +399,9 @@ gantt
 
 ### Monitor Performance
 
-- **Sampling frequency**: ~4 MHz (ESP32 limited)
-- **Response latency**: <1μs for PBI operations
-- **Serial throughput**: 115200 baud for debug
-- **CPU usage**: ~80% Core 1, ~20% Core 0
+- **Sampling**: one bus cycle at a time, Core 1 fully dedicated
+- **Read response**: byte prepared during PHI1, outputs on right after PHI2 rises (to be measured with a scope)
+- **Serial throughput**: 115200 baud for debug (`LOG_BAUD`)
 - **Compatibility**: Atari PAL (1.77 MHz) and NTSC (1.79 MHz)
 
 ## 📁 Project Files
@@ -446,18 +412,11 @@ gantt
 ESP32-BOBOARD-5V/
 ├── 📁 firmware/
 │   └── 📁 6502_monitor/
-│       ├── 📄 platformio.ini          # PlatformIO configuration
-│       ├── 📄 pre_build.py            # Pre-build script: assembles 6502 ROM
+│       ├── 📄 platformio.ini          # PlatformIO configuration (one environment: nodemcu-32s)
+│       ├── 📄 efuse_vdd_sdio.py       # VDD_SDIO efuse check/burn before every upload
 │       ├── 📁 src/
-│       │   └── 📄 main.cpp            # ESP32 firmware (PBI ROM emulator)
-│       ├── 📁 include/
-│       │   └── 📄 pbi-driver.h        # C array generated from 6502 ROM (auto)
-│       └── 📁 6502/
-│           ├── 📄 Makefile            # Assembles vera_pbi_handler.s → pbi-driver.h
-│           ├── 📄 pbi-driver.ld       # Linker script (origin $D800, size 2 KB)
-│           └── 📁 src/
-│               ├── 📄 vera_pbi_handler.s  # PBI ROM driver for VERA X16 card
-│               └── 📄 vera_common.inc     # Shared symbols: VERA registers, PBI constants
+│       │   └── 📄 main.cpp            # ESP32 firmware (ROM-less PBI/CCTL peripheral + monitor)
+│       ├── 📄 README.md, HARDWARE.md, PIN_MAPPING.md/.tex/.pdf, Logs.md
 ├── 📁 schematics/
 │   └── 📄 ESP32-BOBOARD-5V.pdf    # Electrical schematic
 ├── 📁 3D/
