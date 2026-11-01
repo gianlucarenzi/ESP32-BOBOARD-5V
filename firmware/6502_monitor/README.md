@@ -147,6 +147,11 @@ your schematic before soldering):
 | GND | 1, 22, A, Z | 29, 30 |
 | +5V | 2, 3 | 31, 32 |
 
+Test program: [`c64-test/`](c64-test/README.md), `georam_test.prg`
+(cc65): presence, size by block aliasing, page register bits 0-5, a march
+over every page of every block; `make sim` / `make simall` run it on py65
+against a model of the GeoRAM, with injected faults.
+
 Log lines: `[DE05 - RAM blk $03 pg $10 +$05] R $AA  SEL DRV`,
 `GEORAM_PAGE`, `GEORAM_BLOCK`.  As on the Atari, the module is programmed
 only disconnected from the computer, from the PC.
