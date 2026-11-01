@@ -59,10 +59,9 @@ ESP32-BOBOARD-5V is a specialized breakout board designed to interface an ESP32 
 - **Status LEDs** and control buttons
 
 ### Firmware
-- **ROM-less PBI / CCTL banked RAM, GeoRAM style**: two pages, $D100–$D1FF (`~D1XX`) and $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
-- **One latch at a time**: `$80` to $D1FF puts the registers in $D1xx and the RAM in $D500–$D5FF (256 bytes); `$80` to $D5FF puts the registers in $D5xx and the RAM in $D100–$D1FE (255 bytes: $D1FF, the PBI register, is protected unless built with `D1FF_RAM=1`); when deselected it never drives the bus
-- **Register page**: bank count at $xxFB–$xxFC (read-only), 16-bit bank register at $xxFD–$xxFE, latch at $xxFF (bit 7, device ID `$80`)
-- **Banks from the heap**: at boot the firmware takes the free ESP32 DRAM in 256-byte banks, one RAM for both modes (estimated 200–230 KB, the exact value is printed at boot)
+- **ROM-less PBI / CCTL banked RAM, GeoRAM style**: registers in $D100–$D1FF (`~D1XX`) and RAM window in $D500–$D5FF (`~CCTL`), decoded by the Atari MMU/PLA; only A0–A7 sampled
+- **Fixed roles**: 256-byte RAM window at $D500–$D5FF; registers in $D1xx: bank count at $D1FB–$D1FC (read-only), 16-bit bank register at $D1FD–$D1FE, PBI select latch at $D1FF (bit 7, device ID `$80`); when deselected it never drives the bus
+- **Banks from the heap**: at boot the firmware takes the free ESP32 DRAM in 256-byte banks (estimated 200–230 KB, the exact value is printed at boot)
 - **Commodore 64 (`c64` env)**: the same board on the expansion port as a GeoRAM-compatible expansion: RAM window in IO1 $DE00–$DEFF, page in $DFFE and 16 KB block in $DFFF (write-only); /IO1 on J3 pin 12, /IO2 on J3 pin 11; 256 KB (16 blocks, aliased like a real GeoRAM: ~210 KB from DRAM, the rest from the ESP32 IRAM)
 - **No ROM, no MPD / EXTSEL**: every bus pin is an input, D0–D7 become outputs only to answer a read
 - **Dual-core**: Core 1 owns the bus (interrupts masked, decode during PHI1), Core 0 prints the log
@@ -207,32 +206,24 @@ The firmware is based on FreeRTOS and uses both ESP32 cores:
 
 #### 1. Bus cycle
 
-- **PHI1**: 200 ns after PHI2 falls (`BUS_ADDR_SETTLE_NS`) it samples A0–A7, R/W, `~D1XX` and `~CCTL`; for a read of the RAM page or of a register of the register page it writes the byte to `GPIO.out` with the outputs still off
+- **PHI1**: 200 ns after PHI2 falls (`BUS_ADDR_SETTLE_NS`) it samples A0–A7, R/W, `~D1XX` and `~CCTL`; for a read of the RAM window or of a register ($D1FB–$D1FE) it writes the byte to `GPIO.out` with the outputs still off
 - **PHI2 rising edge**: one store turns D0–D7 on; if the select shows up only on the rising edge, the byte is driven late
 - **Write**: data sampled 120 ns after PHI2 rises (`BUS_WR_SAMPLE_NS`)
 - **PHI2 falling edge**: D0–D7 released; the cycle's event goes to the log during the next PHI1
 
 #### 2. PBI / CCTL Banked RAM (GeoRAM Style)
 
-One page holds the registers, the other one is a 256-byte window on the RAM, like the C64 GeoRAM between IO1 and IO2.  One latch at a time:
+Fixed roles, like the C64 GeoRAM between IO2 and IO1: the PBI page $D1xx holds the registers, the CCTL page $D500–$D5FF is a 256-byte window on the RAM.
 
-| Latch written | Registers | RAM window |
-|---------------|-----------|------------|
-| $D1FF ← `$80` | $D1xx | $D500–$D5FF (256 bytes) |
-| $D5FF ← `$80` | $D5xx | $D100–$D1FE (255 bytes; $D1FF protected) |
+| Address | Function | Notes |
+|---------|----------|-------|
+| **$D500–$D5FF** | RAM window: 256 bytes of the current bank (R/W) | Only while the device is selected |
+| **$D1FB–$D1FC** | Number of banks (R, 16 bit) | Depends on the free heap, writes ignored |
+| **$D1FD–$D1FE** | Bank register (R/W, 16 bit, little-endian) | A bank beyond the count does not respond |
+| **$D1FF** | PBI select latch (W: bit 7 = ID `$80`) | Never driven on reads ($D1FF is the PBI IRQ status) |
+| **$D100–$D1FA** | Reserved | Never driven, writes ignored |
 
-Deselected, $D1FF and $D5FF are both latches and nothing else is decoded.  In the RAM page the latch is RAM: to move the registers to the other page, deselect first.
-
-Register page:
-
-| Offset | Function | Notes |
-|--------|----------|-------|
-| **$00–$FA** | Reserved | Never driven, writes ignored |
-| **$FB–$FC** | Number of banks (R, 16 bit) | Depends on the free heap, writes ignored |
-| **$FD–$FE** | Bank register (R/W, 16 bit, little-endian) | A bank beyond the count does not respond |
-| **$FF** | Latch (W: bit 7 = 0 deselects) | Never driven on reads |
-
-$D1FF is the PBI register of the Atari (the OS reads it on every IRQ, other PBI devices drive it): with the RAM in $D1xx it stays protected, never driven and writes ignored.  With `-D D1FF_RAM=1` it becomes RAM too, only without other PBI devices.
+PBI rules: a write to $D1FF selects the device when bit 7 is 1 and deselects it when bit 7 is 0 (each PBI device looks only at its own bit).  Deselected, it never drives the bus and ignores every write but the latch.
 
 Wiring to the Atari 130XE (cartridge slot and ECI).  On the 800XL the PBI connector carries no `~D1XX`: $D1xx has to be decoded from A8–A15 with external logic, not provided on this board:
 
@@ -242,7 +233,7 @@ Breadboard view, Fritzing style:
 
 ![Atari breadboard](firmware/6502_monitor/docs/breadboard_atari.svg)
 
-The 256-byte banks are allocated at boot from the free ESP32 DRAM heap (minus 24 KB kept for the system); one RAM and one bank register for both modes.  Linear address: bank = address >> 8, offset = address & $FF.  Power-up: deselected, bank 0, RAM `$00`; the device does not see the Atari RESET and keeps its state, the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF / $D5FF.
+The 256-byte banks are allocated at boot from the free ESP32 DRAM heap (minus 24 KB kept for the system).  Linear address: bank = address >> 8, offset = address & $FF.  Power-up: deselected, bank 0, RAM `$00`; the device does not see the Atari RESET and keeps its state, the RAM is not kept across an ESP32 reset.  Without a ROM the OS PBI scan finds no signature at $D803 / $D80B and skips the device: programs select it directly by writing `$80` to $D1FF; the scan writes `$80` then `$00` to $D1FF, so the device ends deselected.
 
 #### 3. Commodore 64: 256 KB GeoRAM (`c64` env)
 
@@ -379,10 +370,9 @@ Timestamp format is `[seconds.microseconds]`:
 ```
 [6502_monitor] Banked RAM PBI / CCTL peripheral, device ID $80
 [6502_monitor] <n> banks x 256 bytes = <k> KB, <b> heap blocks, <h> bytes of heap left
-[6502_monitor] $D1FF <- $80: RAM $D500-$D5FF; $D5FF <- $80: RAM $D100-$D1FE ($D1FF protected)
-[6502_monitor] Register page: count $xxFB-$xxFC, bank $xxFD-$xxFE, latch $xxFF
+[6502_monitor] RAM window $D500-$D5FF; count $D1FB-$D1FC, bank $D1FD-$D1FE, select $D1FF
 [6502_monitor] Bus loop on Core 1 (settle 200 ns, write sample 120 ns), log 115200 baud
-[    1.234567] [D1FF - PBI_SELECT          ] W $80  SELECTED: registers $D1xx, RAM $D5xx
+[    1.234567] [D1FF - PBI_SELECT          ] W $80  SELECTED
 [    1.234601] [D1FD - BANK_SELECT_L       ] W $03  SEL
 [    1.234620] [D1FE - BANK_SELECT_H       ] W $01  SEL
 [    1.234640] [D505 - RAM bank $0103 +$05 ] W $AA  SEL
@@ -391,9 +381,9 @@ Timestamp format is `[seconds.microseconds]`:
 ```
 ```
 
-- `PBI_SELECT` / `CCTL_SELECT` — latch write and new state: `SELECTED` / `DESELECTED`
+- `PBI_SELECT` — latch write and new state: `SELECTED` / `DESELECTED`
 - `SEL` = device selected, `DRV` = byte driven by the device, `-` = not selected (the byte is whatever was on the bus)
-- Offsets are shown as `RAM bank $bbbb +$oo`, `BANK_COUNT_L/H`, `BANK_SELECT_L/H`, `PBI_SELECT` / `CCTL_SELECT` or `RESERVED`; the bank numbers in the example are indicative
+- Offsets are shown as `RAM bank $bbbb +$oo`, `BANK_COUNT_L/H`, `BANK_SELECT_L/H`, `PBI_SELECT` or `RESERVED`; the bank numbers in the example are indicative
 - Timestamps come from the Core 1 cycle counter (CCOUNT extended to 64 bit)
 - Each line is a single `Serial.write()`: lines never interleave; events lost when the ring is full are counted
 - Read-only debug also on J4: GND (pin 1) and TX0 (pin 3, 3.3 V); leave RX0 (pin 2) unconnected
@@ -409,16 +399,16 @@ flowchart TD
     C --> D[PHI2 falls: release D0-D7, log previous cycle]
     D --> E[Wait BUS_ADDR_SETTLE_NS]
     E --> F[Sample A0-A7, R/W, ~D1XX, ~CCTL]
-    F --> G{Read of the RAM page or of a register?}
+    F --> G{Read of the RAM window or of a register?}
     G -->|Yes| H[Byte into GPIO.out, outputs off]
     G -->|No| I[No outputs]
     H --> J[PHI2 rises: turn D0-D7 on]
     I --> K[PHI2 rises]
     J --> L[Wait for PHI2 to fall]
-    K --> M{Write to a page?}
-    M -->|Yes latch| N[Bit 7: registers in this page, RAM in the other; 0: deselect]
-    M -->|Yes $xxFD-$xxFE registers| Q[Switch bank]
-    M -->|Yes RAM page| O[Store in RAM]
+    K --> M{Write?}
+    M -->|Yes $D1FF| N[Latch from bit 7]
+    M -->|Yes $D1FD-$D1FE| Q[Switch bank if selected]
+    M -->|Yes $D5xx| O[Store in RAM if selected]
     M -->|No| P[Sample the read byte for the log]
     N --> L
     Q --> L
@@ -440,7 +430,7 @@ sequenceDiagram
     participant L  as Log ring
 
     CPU->>ESP: Write $80 → $D1FF
-    ESP->>ESP: registers in $D1xx, RAM in $D5xx
+    ESP->>ESP: selected (bit 7 = 1)
     ESP->>L: PBI_SELECT SELECTED
 
     CPU->>ESP: Write $03 → $D1FD, $00 → $D1FE

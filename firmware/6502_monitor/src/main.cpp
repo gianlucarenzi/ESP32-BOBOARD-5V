@@ -3,48 +3,37 @@
  *
  * FIRMWARE: Targets NodeMCU DevKit V1 (ESP32-WROOM, Xtensa LX6).
  *
- * BEHAVIOUR: a banked RAM expansion in the Atari I/O area, GeoRAM style:
- * one page holds the registers, the other one is a 256-byte window on the
- * RAM.
- * - Two pages, decoded by the Atari MMU / PLA (on a C64 the same two select
- *   pins would be IO1 / IO2):
- *     ~D1XX  $D100-$D1FF  (PBI device area)
- *     ~CCTL  $D500-$D5FF  (cartridge control area)
+ * BEHAVIOUR: a banked RAM expansion in the Atari I/O area, GeoRAM style
+ * with fixed roles: the PBI page holds the registers, the CCTL page is a
+ * 256-byte window on the RAM.
+ * - Two pages, decoded by the Atari MMU / PLA:
+ *     ~D1XX  $D100-$D1FF  registers (PBI device area)
+ *     ~CCTL  $D500-$D5FF  RAM window (cartridge control area)
  *   Only A0-A7 are sampled: the page comes from the select line.
- * - Deselected: $D1FF and $D5FF are both select latches (W, bit 7 = PBI
- *   device ID $80); nothing else is decoded, nothing is driven.
- * - Only one latch at a time.  Writing bit 7 = 1 to the latch of a page
- *   selects the device with the registers in that page and the RAM in the
- *   other one:
- *     $D1FF <- $80   registers $D1xx, RAM $D500-$D5FF (256 bytes)
- *     $D5FF <- $80   registers $D5xx, RAM $D100-$D1FE (255 bytes: $D1FF is
- *                    the PBI interrupt / select register of the Atari and is
- *                    never driven, writes ignored; -D D1FF_RAM=1 makes it
- *                    RAM too, only without other PBI devices)
- *   The register page:
- *     $xxFB-$xxFC  number of banks (R, 16 bit, little-endian)
- *     $xxFD-$xxFE  bank register (R/W, 16 bit, little-endian)
- *     $xxFF        select latch (W): bit 7 = 0 deselects; never driven
- *     $xx00-$xxFA  reserved: never driven, writes ignored
- *   The latch of the RAM page is RAM: to move the registers to the other
- *   page, deselect first.
- * - One RAM, one bank register for both modes: bank n is the same 256 bytes
- *   whichever page shows it.  The banks are allocated at boot from the free
- *   ESP32 DRAM heap (every byte-addressable block, minus a reserve for the
- *   system); the count depends on the heap.  A bank number beyond the count
- *   selects no RAM: the RAM page is not driven and writes are ignored.
+ *     $D1FB-$D1FC  number of banks (R, 16 bit, little-endian)
+ *     $D1FD-$D1FE  bank register (R/W, 16 bit, little-endian)
+ *     $D1FF        PBI select latch (W): bit 7 = device ID $80 selects (1)
+ *                  or deselects (0); never driven ($D1FF is the PBI
+ *                  interrupt status, read by the OS)
+ *     $D100-$D1FA  reserved: never driven, writes ignored
+ *     $D500-$D5FF  256 bytes of the current bank (R/W)
+ * - Selected: registers and RAM window answer.  Deselected: the device never
+ *   drives the bus and ignores every write but the latch, as every PBI
+ *   device.
+ * - The banks are allocated at boot from the free ESP32 DRAM heap (every
+ *   byte-addressable block, minus a reserve for the system); the count
+ *   depends on the heap.  A bank number beyond the count selects no RAM:
+ *   the window is not driven and writes are ignored.
  * - Power-up: deselected, bank 0, RAM $00.  The device does not see the
- *   Atari RESET: its state is kept across it.  RAM is not kept across an
+ *   Atari RESET: its state is kept across it (the OS PBI scan writes $80
+ *   then $00 to $D1FF, so it ends deselected).  RAM is not kept across an
  *   ESP32 reset.
  * - No ROM: the OS PBI scan does not find a signature at $D803 / $D80B and
- *   skips the device; programs select it directly through $D1FF / $D5FF.
- *   The scan writes $80 then $00 to $D1FF: deselected afterwards, unless
- *   the registers are in $D5xx (then $D1FF is protected, or RAM with
- *   D1FF_RAM).
+ *   skips the device; programs select it directly through $D1FF.
  * - No MPD / EXTSEL: no ROM at $D800, no internal RAM to replace in the I/O
  *   area.
  * - LOG: lock-free ring from the Core 1 bus loop to LogTask on Core 0; prints
- *   latch changes and every access to both windows, selected or not.
+ *   latch changes and every access to both pages, selected or not.
  *
  * BUS_C64 = 1 (PlatformIO env c64): GeoRAM on the Commodore 64 expansion
  * port instead, see "C64 GeoRAM" below.
@@ -199,27 +188,17 @@ static_assert(PIN_A6 >= 21 && PIN_A6 <= 27 && PIN_A7 >= 21 && PIN_A7 <= 27,
 // ---------------------------------------------------------------------------
 // Device
 // ---------------------------------------------------------------------------
-#define PBI_DEV_ID   0x80u  // PBI device ID bit, also the CCTL select bit
-#define BANK_SIZE    256u   // one bank = one RAM page
-#define COUNT_OFFSET 0xFBu  // $xxFB-$xxFC  number of banks (R)
-#define BANK_OFFSET  0xFDu  // $xxFD-$xxFE  bank register (R/W)
-#define LATCH_OFFSET 0xFFu  // $D1FF / $D5FF
+#define PBI_DEV_ID   0x80u  // PBI device ID bit
+#define BANK_SIZE    256u   // one bank = the whole $D5xx window
+#define COUNT_OFFSET 0xFBu  // $D1FB-$D1FC  number of banks (R)
+#define BANK_OFFSET  0xFDu  // $D1FD-$D1FE  bank register (R/W)
+#define LATCH_OFFSET 0xFFu  // $D1FF
 
-// 1: $D1FF is RAM when the RAM is in $D1xx (only without other PBI devices:
-// the OS reads $D1FF on every IRQ, other PBI devices drive it).
-#ifndef D1FF_RAM
-#define D1FF_RAM 0
-#endif
-
-#define WIN_D1XX 0
-#define WIN_CCTL 1
+#define WIN_D1XX 0          // registers
+#define WIN_CCTL 1          // RAM window
 #define WINDOWS  2
-#define CTL_NONE 0xFFu      // deselected
 
 static const uint8_t WIN_PAGE[WINDOWS] = {0xD1, 0xD5};
-
-// Bytes of the RAM page: $D1FF stays the PBI register unless D1FF_RAM.
-#define WIN_RAM_SIZE(w) (((w) == WIN_D1XX && !D1FF_RAM) ? BANK_SIZE - 1u : BANK_SIZE)
 
 /*
  * Banked RAM: 256-byte banks carved at boot from the free DRAM heap, in as
@@ -239,19 +218,17 @@ static uint32_t  bank_chunks;         // heap blocks used (log)
 
 // Device state, read by the bus loop assembly: field offsets are fixed.
 typedef struct {
-    uint8_t *ram[WINDOWS];      // +0 / +4  RAM of the current bank, set for the
-                                //          RAM page only, NULL beyond the count
-    uint32_t ram_size[WINDOWS]; // +8 / +12 bytes of the page as RAM page
-    uint8_t  regs[4];           // +16  count lo, count hi, bank lo, bank hi
-    uint8_t  ctl;               // +20  page holding registers and latch,
-                                //      CTL_NONE: deselected
+    uint8_t *ram;       // +0  RAM of the current bank in $D5xx; NULL while
+                        //     deselected or beyond the count
+    uint8_t  regs[4];   // +4  count lo, count hi, bank lo, bank hi
+    uint8_t  sel;       // +8  $D1FF latch (0 / 1)
     uint8_t  pad[3];
 } DevState;
 
-static_assert(sizeof(DevState) == 24 && offsetof(DevState, ram) == 0 &&
-              offsetof(DevState, ram_size) == 8 && offsetof(DevState, regs) == 16 &&
-              offsetof(DevState, ctl) == 20, "DevState layout used by the bus loop assembly");
-static_assert(WIN_D1XX == 0 && WIN_CCTL == 1, "window index used by the bus loop assembly");
+static_assert(sizeof(DevState) == 12 && offsetof(DevState, ram) == 0 &&
+              offsetof(DevState, regs) == 4 && offsetof(DevState, sel) == 8,
+              "DevState layout used by the bus loop assembly");
+static_assert(WIN_D1XX == 0 && WIN_CCTL == 1, "page index used by the bus loop assembly");
 static_assert(COUNT_OFFSET == 0xFBu && BANK_OFFSET == 0xFDu,
               "movi -0xFB in the bus loop assembly");
 
@@ -267,17 +244,12 @@ static inline __attribute__((always_inline)) uint32_t dev_bank(void)
     return dev.regs[2] | (uint32_t)dev.regs[3] << 8;
 }
 
-// Show the current bank in the RAM page (none while deselected, NULL when
-// no RAM is behind that number).
+// Show the current bank in $D5xx (none while deselected, NULL when no RAM
+// is behind that number).
 static inline __attribute__((always_inline)) void dev_map(void)
 {
-    dev.ram[0] = NULL;
-    dev.ram[1] = NULL;
-    if (dev.ctl != CTL_NONE)
-    {
-        const uint32_t b = dev_bank();
-        dev.ram[dev.ctl ^ 1u] = (b < dev_count()) ? bank_tab[b] : NULL;
-    }
+    const uint32_t b = dev_bank();
+    dev.ram = (dev.sel && b < dev_count()) ? bank_tab[b] : NULL;
 }
 
 /*
@@ -345,7 +317,7 @@ static uint32_t drive_lut[256];
 // ---------------------------------------------------------------------------
 #define LOG_RING_SIZE 1024u   // power of two
 
-#define EVT_LATCH 0   // select latch change ($D1FF / $D5FF write)
+#define EVT_LATCH 0   // select latch change ($D1FF write)
 #define EVT_REG   1   // access to RAM, registers or reserved offsets
 
 // flags: bit 0 = write   bit 1 = device selected (EVT_REG) / new latch state
@@ -511,9 +483,7 @@ static void alloc_banks(void)
 #endif
     bank_heap_left = heap_caps_get_free_size(caps);
 
-    dev.ctl         = CTL_NONE;
-    dev.ram_size[0] = WIN_RAM_SIZE(WIN_D1XX);
-    dev.ram_size[1] = WIN_RAM_SIZE(WIN_CCTL);
+    dev.sel         = 0;
     dev.regs[0]     = (uint8_t)n;
     dev.regs[1]     = (uint8_t)(n >> 8);
     dev.regs[2]     = 0;
@@ -636,21 +606,21 @@ static void bus_int_wdt_disable(void)
 
 /*
  * Byte the device answers with at offset `off` of page `win`: the RAM of the
- * current bank or a register.  Returns 0 when the device must not drive the
- * bus (deselected, latch, reserved offsets, protected $D1FF, bank beyond the
- * count).  C copy of the PHI1 assembly, used on the late-select path only.
+ * current bank ($D5xx) or a register ($D1FB-$D1FE).  Returns 0 when the
+ * device must not drive the bus (deselected, latch, reserved offsets, bank
+ * beyond the count).  C copy of the PHI1 assembly, used on the late-select
+ * path only.
  */
 BUS_INLINE uint32_t dev_read(int win, uint32_t off, uint32_t *val)
 {
-    const uint8_t *ram = dev.ram[win];
-    if (ram)
+    if (win == WIN_CCTL)
     {
-        if (off >= dev.ram_size[win])
+        if (!dev.ram)
             return 0;
-        *val = ram[off];
+        *val = dev.ram[off];
         return 1;
     }
-    if (dev.ctl == (uint32_t)win && off - COUNT_OFFSET < 4u)
+    if (dev.sel && off - COUNT_OFFSET < 4u)
     {
         *val = dev.regs[off - COUNT_OFFSET];
         return 1;
@@ -661,9 +631,9 @@ BUS_INLINE uint32_t dev_read(int win, uint32_t off, uint32_t *val)
 // Log flags for an access to page `win` with the current state.
 BUS_INLINE uint8_t dev_flags(int win)
 {
-    if (dev.ctl == CTL_NONE)
+    if (!dev.sel)
         return 0;
-    return (dev.ctl == (uint32_t)win) ? FL_SEL : (FL_SEL | FL_RAM);
+    return (win == WIN_CCTL) ? (FL_SEL | FL_RAM) : FL_SEL;
 }
 
 // ============================================================================
@@ -871,13 +841,13 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
         /*
          * 4. PHI1 decode, in assembly so that every operand stays in a
          *    register: A0-A7 from the tables, page from ~D1XX / ~CCTL; on a
-         *    read of the RAM page (bank within the count, not the protected
-         *    $D1FF) or of a register ($FB-$FE) of the register page, the
-         *    byte goes into GPIO.out now (outputs off) and the outputs are
-         *    turned on at the PHI2 rising edge.
+         *    read of $D5xx (selected, bank within the count) or of
+         *    $D1FB-$D1FE (selected), the byte goes into GPIO.out now
+         *    (outputs off) and the outputs are turned on at the PHI2 rising
+         *    edge.
          *    win = 0 ($D1xx), 1 ($D5xx), -1 (neither).
          */
-        uint32_t lo, off, t, val, ws, drive;
+        uint32_t lo, off, t, val, drive;
         int32_t  win;
         asm volatile(
             "   l32i   %[lo], %[gpio], %[o_in]    \n\t"   /* GPIO.in  */
@@ -891,42 +861,39 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             "   or     %[off], %[off], %[t]       \n\t"
             "   movi   %[drv], 0                  \n\t"
             "   movi   %[val], 0                  \n\t"
-            "   movi   %[win], 0                  \n\t"
-            "   bbci   %[lo], %[b_d1], 1f         \n\t"   /* ~D1XX low: page 0 */
             "   movi   %[win], 1                  \n\t"
-            "   bbci   %[lo], %[b_cc], 1f         \n\t"   /* ~CCTL low: page 1 */
+            "   bbci   %[lo], %[b_cc], 2f         \n\t"   /* ~CCTL low: RAM window */
+            "   movi   %[win], 0                  \n\t"
+            "   bbci   %[lo], %[b_d1], 1f         \n\t"   /* ~D1XX low: registers */
             "   movi   %[win], -1                 \n\t"
             "   j      9f                         \n\t"
-            "1: bbci   %[lo], %[b_rw], 9f         \n\t"   /* write cycle */
-            "   addx4  %[ws], %[win], %[st]       \n\t"   /* &dev.ram[win] */
-            "   l32i   %[t], %[ws], 0             \n\t"   /* ram */
-            "   beqz   %[t], 2f                   \n\t"   /* not the RAM page, or no RAM */
-            "   l32i   %[ws], %[ws], 8            \n\t"   /* ram_size[win] */
-            "   bgeu   %[off], %[ws], 9f          \n\t"   /* protected $D1FF */
+            "2: bbci   %[lo], %[b_rw], 9f         \n\t"   /* write cycle */
+            "   l32i   %[t], %[st], 0             \n\t"   /* ram */
+            "   beqz   %[t], 9f                   \n\t"   /* deselected or no RAM */
             "   add    %[t], %[t], %[off]         \n\t"
             "   l8ui   %[val], %[t], 0            \n\t"
             "   j      3f                         \n\t"
-            "2: l8ui   %[t], %[st], 20            \n\t"   /* ctl */
-            "   bne    %[t], %[win], 9f           \n\t"   /* not the register page */
+            "1: bbci   %[lo], %[b_rw], 9f         \n\t"   /* write cycle */
+            "   l8ui   %[t], %[st], 8             \n\t"   /* sel */
+            "   beqz   %[t], 9f                   \n\t"
             "   movi   %[t], -0xFB                \n\t"   /* COUNT_OFFSET */
             "   add    %[t], %[off], %[t]         \n\t"
             "   bgeui  %[t], 4, 9f                \n\t"   /* not $FB-$FE */
             "   add    %[t], %[t], %[st]          \n\t"
-            "   l8ui   %[val], %[t], 16           \n\t"   /* regs[off - $FB] */
+            "   l8ui   %[val], %[t], 4            \n\t"   /* regs[off - $FB] */
             "3: addx4  %[t], %[val], %[dlut]      \n\t"
             "   l32i   %[t], %[t], 0              \n\t"
             "   s32i   %[t], %[gpio], %[o_out]    \n\t"   /* GPIO.out, outputs off */
             "   movi   %[drv], 1                  \n\t"
             "9:                                   \n\t"
             : [lo] "=&r"(lo), [off] "=&r"(off), [t] "=&r"(t), [val] "=&r"(val),
-              [ws] "=&r"(ws), [drv] "=&r"(drive), [win] "=&r"(win)
+              [drv] "=&r"(drive), [win] "=&r"(win)
             : [gpio] "r"(&GPIO), [luthi] "r"(addr_lut_hi), [lutlo] "r"(addr_lut_lo),
               [dlut] "r"(drive_lut), [st] "r"(&dev),
               [o_in] "n"(GPIO_OFF(in)), [o_in1] "n"(GPIO_OFF(in1)),
               [o_out] "n"(GPIO_OFF(out)),
               [b_d1] "n"(PIN_D1XX_N), [b_cc] "n"(PIN_CCTL_N), [b_rw] "n"(PIN_RW)
             : "memory");
-        (void)ws;
         const bool rd = (lo & m_rw) != 0;
 
         const uint32_t s_rise = wait_phi2_high_drive(drive);
@@ -991,28 +958,24 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
             pend.type  = EVT_REG;
             pend.flags = FL_WRITE | dev_flags(win);
 
-            if (off == LATCH_OFFSET && (dev.ctl == CTL_NONE || dev.ctl == (uint32_t)win))
+            if (win == WIN_CCTL)
             {
-                // Latch of the register page, or of either page while
-                // deselected: bit 7 (device ID) selects with the registers
-                // here, 0 deselects.
-                const uint8_t ctl = (data & PBI_DEV_ID) ? (uint8_t)win : (uint8_t)CTL_NONE;
-                if (ctl != dev.ctl)
+                if (dev.ram)                // selected, bank within the count
+                    dev.ram[off] = data;
+            }
+            else if (off == LATCH_OFFSET)
+            {
+                // $D1FF: each PBI device latches only its own ID bit.
+                const uint8_t sel = (data & PBI_DEV_ID) ? 1u : 0u;
+                if (sel != dev.sel)
                 {
-                    dev.ctl = ctl;
+                    dev.sel = sel;
                     dev_map();
                     pend.type  = EVT_LATCH;
-                    pend.flags = FL_WRITE | (ctl != CTL_NONE ? FL_SEL : 0u);
+                    pend.flags = FL_WRITE | (sel ? FL_SEL : 0u);
                 }
             }
-            else if (dev.ram[win])
-            {
-                // RAM page ($D1FF protected unless D1FF_RAM).
-                if (off < dev.ram_size[win])
-                    dev.ram[win][off] = data;
-            }
-            else if (dev.ctl == (uint32_t)win &&
-                     (off == BANK_OFFSET || off == BANK_OFFSET + 1u))
+            else if (dev.sel && (off == BANK_OFFSET || off == BANK_OFFSET + 1u))
             {
                 dev.regs[off - COUNT_OFFSET] = data;
                 dev_map();
@@ -1088,15 +1051,14 @@ static const char *offset_name(uint8_t w, uint8_t off, uint8_t flags, uint16_t b
         return "GEORAM_BLOCK";
     return "UNUSED";
 #endif
-    if ((flags & FL_RAM) && off < WIN_RAM_SIZE(w))
+    (void)flags;
+    if (w == WIN_CCTL)
     {
         snprintf(buf, len, "RAM bank $%04X +$%02X", bank, off);
         return buf;
     }
     if (off == LATCH_OFFSET)
-        return (w == WIN_D1XX) ? "PBI_SELECT" : "CCTL_SELECT";
-    if (flags & FL_RAM)
-        return "RESERVED";
+        return "PBI_SELECT";
     if (off == COUNT_OFFSET)
         return "BANK_COUNT_L";
     if (off == COUNT_OFFSET + 1u)
@@ -1130,10 +1092,9 @@ static void log_drain(void)
         if (evt.type == EVT_LATCH)
         {
             if (evt.flags & FL_SEL)
-                log_line("[%5lu.%06lu] [%02X%02X - %-20s] W $%02X  SELECTED: "
-                         "registers $%02Xxx, RAM $%02Xxx\n",
+                log_line("[%5lu.%06lu] [%02X%02X - %-20s] W $%02X  SELECTED\n",
                          (unsigned long)sec, (unsigned long)us, page, evt.offset,
-                         name, evt.data, page, WIN_PAGE[w ^ 1u]);
+                         name, evt.data);
             else
                 log_line("[%5lu.%06lu] [%02X%02X - %-20s] W $%02X  DESELECTED\n",
                          (unsigned long)sec, (unsigned long)us, page, evt.offset,
@@ -1191,10 +1152,8 @@ static void LogTask(void *arg)
              (unsigned long)banks, (unsigned)BANK_SIZE,
              (unsigned long)(banks * BANK_SIZE / 1024u),
              (unsigned long)bank_chunks, (unsigned long)bank_heap_left);
-    log_line("[6502_monitor] $D1FF <- $80: RAM $D500-$D5FF; $D5FF <- $80: RAM $D100-$D1%s\n",
-             D1FF_RAM ? "FF" : "FE ($D1FF protected)");
-    log_line("[6502_monitor] Register page: count $xxFB-$xxFC, bank $xxFD-$xxFE, "
-             "latch $xxFF\n");
+    log_line("[6502_monitor] RAM window $D500-$D5FF; count $D1FB-$D1FC, bank $D1FD-$D1FE, "
+             "select $D1FF\n");
     log_line("[6502_monitor] Bus loop on Core 1 (settle %u ns, write sample %u ns), "
              "log %u baud\n",
              (unsigned)BUS_ADDR_SETTLE_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);

@@ -2,19 +2,17 @@
 
 ## 1. Overview
 
-The ESP32 behaves as a banked RAM expansion on the Atari 800XL/130XE bus,
-GeoRAM style:
+The ESP32 behaves as a banked RAM expansion on the Atari 130XE bus (on the
+800XL `~D1XX` needs external decoding), GeoRAM style with fixed roles:
 
-- two pages, **$D100–$D1FF** (`~D1XX`) and **$D500–$D5FF** (`~CCTL`), both
-  decoded by the Atari MMU / PLA; only **A0–A7** are sampled
-- one latch at a time: `$80` to **$D1FF** puts the registers in `$D1xx` and
-  the RAM in **$D500–$D5FF**; `$80` to **$D5FF** puts the registers in
-  `$D5xx` and the RAM in **$D100–$D1FE** (`$D1FF`, the PBI register, is
-  protected unless built with `D1FF_RAM=1`)
-- register page: bank count **$xxFB–$xxFC** (read-only), 16-bit bank
-  register **$xxFD–$xxFE**, latch **$xxFF** (bit 7 = 0 deselects); one RAM
-  of 256-byte banks from the free ESP32 DRAM heap at boot (estimated
-  200–230 KB, printed at boot)
+- two pages, **$D100–$D1FF** (`~D1XX`, registers) and **$D500–$D5FF**
+  (`~CCTL`, RAM window), both decoded by the Atari MMU / PLA; only **A0–A7**
+  are sampled
+- registers: bank count **$D1FB–$D1FC** (read-only), 16-bit bank register
+  **$D1FD–$D1FE**, PBI select latch **$D1FF** (bit 7, device ID `$80`)
+- RAM window **$D500–$D5FF**: 256 bytes of the current bank; 256-byte banks
+  from the free ESP32 DRAM heap at boot (estimated 200–230 KB, printed at
+  boot)
 - never drives the bus when deselected; no ROM, no **MPD**, no **EXTSEL**
 - logs every access to both pages with microsecond timestamps via a
   lock-free ring buffer (Core 1 → Core 0)

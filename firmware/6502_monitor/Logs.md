@@ -1,6 +1,13 @@
 # Project Logs & Architectural Decisions
 
-## 2026-11-01: ROM-less Banked RAM (GeoRAM Style), C64 GeoRAM and Test, Bus Loop from RBL-XE, Serial Log, Bootstrap
+## 2026-11-01: ROM-less Banked RAM (GeoRAM Style, Fixed Roles), C64 GeoRAM and Test, Bus Loop from RBL-XE, Serial Log, Bootstrap
+
+### Atari: Fixed Roles, Registers in $D1xx, RAM Window in $D5xx (supersedes the one-latch-at-a-time mode below)
+- **Map**: `$D500-$D5FF` = 256 bytes of the current bank; `$D1FB-$D1FC` count (R), `$D1FD-$D1FE` 16-bit bank register (R/W), `$D1FF` PBI select latch (W, bit 7 = ID `$80`, never driven), `$D100-$D1FA` reserved.  Same layout as the C64 GeoRAM (registers in IO2, window in IO1).
+- **Why**: the swapped mode (registers in `$D5xx`, RAM in `$D1xx`) only added trouble: `$D1FF` had to be protected (PBI interrupt status, read by the OS on every IRQ, driven by other PBI devices) or made RAM with `D1FF_RAM`, the window shrank to 255 bytes and the latch had two homes.  With fixed roles `$D1FF` is always the PBI latch, the window always 256 bytes, and the OS PBI scan (`$80` then `$00` to `$D1FF` at power-up and RESET) simply leaves the device deselected.  `D1FF_RAM` and the `$D5FF` latch are gone.  Drawback unchanged: cartridges that bank-switch through CCTL cannot be used while the device is selected.
+- **Bus loop**: `DevState` is 12 bytes (RAM pointer of the current bank, NULL while deselected or beyond the count; count / bank registers; latch).  PHI1 assembly: `~CCTL` → RAM pointer → byte; `~D1XX` → latch → `$FB-$FE` registers.  22 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM read (was 25 / 27).  Log: `PBI_SELECT ... SELECTED`, `RAM bank $bbbb +$oo` for `$D5xx`.
+- **Test program** simplified: COUNT, BANK REG, PROTECT, MARCH (all 256 offsets), LIMIT, KEEP (pattern kept across a deselect); EXCL, SHARED and D1FF are gone.  Simulated with 300 banks: ALL TESTS PASSED in 2.6 M instructions (about 20 s on the Atari for 220 KB); faults: bank register ignored, bank high byte ignored, latch ignored, latch on any bit, D3 stuck, A6 not decoded, writes while deselected, banks beyond the count wrapping, count writable, offset `$FF` not stored, RAM lost on deselect: all eleven detected (count writable now runs to the end: the test keeps its own copy of the count).
+- **Docs**: firmware README, HARDWARE, PIN_MAPPING (md, tex, pdf), board PIN-MAPPING and READMEs (IT / EN: map table, banner, log example, flowchart, sequence diagram), `atari-test/README.md`.  The wiring infographics are unchanged (same pins).
 
 ### Wiring Infographics, Connector Pinouts Checked Online
 - **Fritzing tried first**: Fritzing 1.0 in batch mode (`xvfb-run fritzing -svg`) does not build the generic headers (`module id generic_female_pin_header_N_100mil not found in database`), and its library has no 32-pin header, C64 expansion port or Atari connectors (the fixed generic headers stop at 20 pins and are obsolete).

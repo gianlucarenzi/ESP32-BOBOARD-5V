@@ -1,49 +1,37 @@
 # Atari Banked RAM PBI / CCTL Peripheral & Bus Monitor
 
 ESP32 firmware for the ESP32-BOBOARD-5V that behaves as a banked RAM
-expansion in the Atari I/O area, GeoRAM style: one page holds the registers,
-the other one is a 256-byte window on the RAM.  The two pages are `$D100-$D1FF`
-(PBI) and `$D500-$D5FF` (CCTL); every access to both is logged over a
-lock-free ring buffer.
+expansion in the Atari I/O area, GeoRAM style with fixed roles: the PBI page
+`$D1xx` holds the registers, the CCTL page `$D500-$D5FF` is a 256-byte window
+on the RAM.  Every access to both pages is logged over a lock-free ring
+buffer.
 
 ## Features
 - **Two pages**, selected by the Atari MMU / PLA (on a C64 the same two
-  select pins would be IO1 / IO2):
-    - `~D1XX` → `$D100-$D1FF`
-    - `~CCTL` → `$D500-$D5FF`
+  select pins are IO1 / IO2, see below):
+    - `~D1XX` → `$D100-$D1FF`: registers
+    - `~CCTL` → `$D500-$D5FF`: RAM window
 
   Only A0-A7 are sampled: the page comes from the select line.
-- **One latch at a time.**  Deselected, `$D1FF` and `$D5FF` are both select
-  latches (W, bit 7 = device ID `$80`) and nothing else is decoded.  Writing
-  `$80` to one of them selects the device with the registers in that page and
-  the RAM in the other one:
+- **Map:**
 
-  | Latch written | Registers | RAM window |
-  |---|---|---|
-  | `$D1FF` ← `$80` | `$D1xx` | `$D500-$D5FF` (256 bytes) |
-  | `$D5FF` ← `$80` | `$D5xx` | `$D100-$D1FE` (255 bytes) |
-
-  `$D1FF` is the PBI interrupt / select register of the Atari: with the RAM
-  in `$D1xx` it is protected (never driven, writes ignored).  Build with
-  `-D D1FF_RAM=1` to make it RAM too, only without other PBI devices (the OS
-  reads `$D1FF` on every IRQ, other PBI devices drive it).
-- **Register page:**
-
-  | Offset | Function |
+  | Address | Function |
   |---|---|
-  | `$00-$FA` | reserved: never driven, writes ignored |
-  | `$FB-$FC` | number of banks (R, 16 bit, little-endian) |
-  | `$FD-$FE` | bank register (R/W, 16 bit, little-endian) |
-  | `$FF` | latch (W): bit 7 = 0 deselects; never driven on reads |
+  | `$D500-$D5FF` | 256 bytes of the current bank (R/W) |
+  | `$D1FB-$D1FC` | number of banks (R, 16 bit, little-endian) |
+  | `$D1FD-$D1FE` | bank register (R/W, 16 bit, little-endian) |
+  | `$D1FF` | PBI select latch (W): bit 7 = device ID `$80`; never driven on reads (PBI interrupt status) |
+  | `$D100-$D1FA` | reserved: never driven, writes ignored |
 
-  The latch of the RAM page is RAM: to move the registers to the other page,
-  deselect first.  One RAM and one bank register for both modes: bank n is
-  the same 256 bytes whichever page shows it.
+- **PBI rules:** a write to `$D1FF` selects the device when bit 7 is 1 and
+  deselects it when bit 7 is 0 (each PBI device latches only its own ID
+  bit).  Deselected, the device never drives the bus and ignores every
+  write but the latch.
 - **Banks:** 256 bytes each, allocated at boot from the free ESP32 DRAM heap
   (every byte-addressable block, minus `BANK_HEAP_RESERVE` = 24 KB for the
   system): an estimated 200-230 KB in total, to be confirmed on the board
-  (the exact count is printed at boot and readable at `$xxFB-$xxFC`).  A
-  bank number at or beyond the count selects no RAM: the RAM page is not
+  (the exact count is printed at boot and readable at `$D1FB-$D1FC`).  A
+  bank number at or beyond the count selects no RAM: the window is not
   driven and writes are ignored.  Linear address: bank = address >> 8,
   offset = address & `$FF`, as on a GeoRAM.
 - **State:** power-up deselected, bank 0, RAM `$00`.  The device does not
@@ -51,18 +39,16 @@ lock-free ring buffer.
   across an ESP32 reset.
 - **No ROM, no MPD, no EXTSEL:** the OS PBI scan finds no signature at
   `$D803` / `$D80B` and skips the device; programs select it directly by
-  writing `$80` to `$D1FF` / `$D5FF` (and `$00` to release it).  The scan
-  (power-up and every RESET) writes `$80` then `$00` to `$D1FF`: the device
-  ends deselected, unless the registers are in `$D5xx` (then `$D1FF` is
-  protected, or, with `D1FF_RAM`, the scan overwrites byte `$FF` of the
-  current bank).
+  writing `$80` to `$D1FF` (and `$00` to release it).  The scan (power-up
+  and every RESET) writes `$80` then `$00` to `$D1FF`: the device ends
+  deselected.
 - **Bus monitor:** every access to both pages is logged, selected or not;
   reads of other devices are sampled just before PHI2 falls.
 - **Serial output** (`LogTask` on Core 0, the only writer on Serial, 115200
   baud by default, `-D LOG_BAUD=...`; each line is one `Serial.write()`, so
   lines never interleave):
     ```
-    [    1.234567] [D1FF - PBI_SELECT          ] W $80  SELECTED: registers $D1xx, RAM $D5xx
+    [    1.234567] [D1FF - PBI_SELECT          ] W $80  SELECTED
     [    1.234601] [D1FD - BANK_SELECT_L       ] W $03  SEL
     [    1.234620] [D1FE - BANK_SELECT_H       ] W $01  SEL
     [    1.234640] [D505 - RAM bank $0103 +$05 ] W $AA  SEL
@@ -73,17 +59,17 @@ lock-free ring buffer.
   deselected (the logged byte is whatever was on the bus).
   Timestamps come from the Core 1 cycle counter (CCOUNT extended to 64 bit),
   in µs since the bus loop started.  Events are dropped and counted when the
-  1024-entry ring is full: a block copy through the RAM page easily fills it.
+  1024-entry ring is full: a block copy through the window easily fills it.
 - **Bus loop:** IRAM-resident `MonitorTask` owns Core 1 (interrupts masked,
   interrupt watchdog disabled, no FreeRTOS calls).  `~D1XX` is not
   PHI2-qualified, so A0-A7, R/W and the page selects are decoded during PHI1
   (`BUS_ADDR_SETTLE_NS`, default 200 ns after PHI2 falls) and the read byte
   (RAM of the current bank or a register) is already in `GPIO.out` when
   PHI2 rises: one store turns D0-D7 on.  The PHI1 decode is inline assembly
-  (25 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM
-  read in `$D1xx`, 27 in `$D5xx`), with the device state in a fixed-layout
-  struct (RAM pointer of the current bank per page, RAM page size, count and
-  bank registers, register page) and a 256-entry table for
+  (22 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM
+  read), with the device state in a fixed-layout struct (RAM pointer of the
+  current bank, NULL while deselected or beyond the count; count and bank
+  registers; latch) and a 256-entry table for
   the byte-to-pins conversion.  A
   select that appears only on the rising edge is handled from that sample
   (late drive).  Write data is sampled `BUS_WR_SAMPLE_NS` (default 120 ns)
@@ -92,10 +78,8 @@ lock-free ring buffer.
 
 ## Atari Test Program
 [`atari-test/`](atari-test/README.md): `banked_ram_test.xex` (cc65) checks
-in both modes (RAM in `$D5xx`, then in `$D1xx`) bank count, 16-bit bank
-register, one latch at a time, deselect protection, the RAM shared by the
-two pages, a march over every bank and the bank limit; then the protected
-`$D1FF`.  `make sim` / `make simall` run it on
+bank count, 16-bit bank register, deselect protection, a march over every
+bank (all 256 offsets), the bank limit and the RAM kept across a deselect.  `make sim` / `make simall` run it on
 py65 against a model of the device, with injected faults.
 
 ## Commodore 64: GeoRAM (env `c64`)
@@ -172,9 +156,8 @@ This project uses **PlatformIO**.
 - Tool: `clang-format`.
 
 ### Configuration
-Two build environments: `nodemcu-32s` (Atari, both pages) and `c64`
-(GeoRAM, see above).  On the Atari `-D D1FF_RAM=1`
-makes `$D1FF` RAM (see above).  Bus timing can be
+Two build environments: `nodemcu-32s` (Atari) and `c64` (GeoRAM, see
+above).  Bus timing can be
 tuned with `-D BUS_ADDR_SETTLE_NS=...`, `-D BUS_WR_SAMPLE_NS=...` and
 `-D BUS_PHI2_HIGH_MAX_NS=...` after measuring the real bus.
 

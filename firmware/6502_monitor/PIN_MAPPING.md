@@ -16,13 +16,11 @@ level translators.
 | **D7** | GPIO 19 | D19 |
 
 D0-D7 are inputs; the firmware drives them only while answering a read of a
-read of the RAM page or of a register (bank count, bank register).
+read of the RAM window or of a register (bank count, bank register).
 
-GeoRAM style, one latch at a time: `$80` to `$D1FF` puts the registers in
-`$D1xx` and the RAM in `$D500-$D5FF`; `$80` to `$D5FF` puts the registers in
-`$D5xx` and the RAM in `$D100-$D1FE` (`$D1FF` protected).  Register page:
-count `$xxFB-$xxFC` (R, 16 bit), bank `$xxFD-$xxFE` (R/W, 16 bit), latch
-`$xxFF` (W, bit 7).
+Map: RAM window `$D500-$D5FF` (256 bytes of the current bank); count
+`$D1FB-$D1FC` (R, 16 bit), bank `$D1FD-$D1FE` (R/W, 16 bit), PBI select
+latch `$D1FF` (W, bit 7).
 
 ## 2. Address Bus (A0-A7)
 | 6502 Signal | ESP32 GPIO | Board Label | Note |
@@ -41,8 +39,8 @@ count `$xxFB-$xxFC` (R, 16 bit), bank `$xxFD-$xxFE` (R/W, 16 bit), latch
 | :--- | :--- | :--- | :--- | :--- |
 | **PHI2**    | GPIO 2  | D2  | IN | 6502 System Clock (1.79 MHz) |
 | **R/W**     | GPIO 15 | D15 | IN | Read/Write |
-| **~D1XX**   | GPIO 22 | D22 | IN | $D100–$D1FF page, from the Atari MMU / PLA (Active Low, not PHI2-qualified) |
-| **~CCTL**   | GPIO 23 | D23 | IN | $D500–$D5FF page, from the Atari MMU / PLA (Active Low) |
+| **~D1XX**   | GPIO 22 | D22 | IN | $D100–$D1FF registers, from the Atari MMU / PLA (Active Low, not PHI2-qualified) |
+| **~CCTL**   | GPIO 23 | D23 | IN | $D500–$D5FF RAM window, from the Atari MMU / PLA (Active Low) |
 
 ## 4. Serial Debug
 | Signal | ESP32 GPIO | Board Label | Description |

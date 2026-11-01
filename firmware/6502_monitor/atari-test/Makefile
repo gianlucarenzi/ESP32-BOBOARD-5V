@@ -7,9 +7,9 @@
 PROG   := banked_ram_test
 CL65   ?= cl65
 PYTHON ?= python3
-FAULTS := bankreg_ignored bank_hi_ignored both_latches stuck_d3 alias_a6 \
-          separate_ram writes_when_deselected limit_wraps count_writable \
-          d1ff_unprotected
+FAULTS := bankreg_ignored bank_hi_ignored latch_ignored latch_any_bit stuck_d3 \
+          alias_a6 writes_when_deselected limit_wraps count_writable \
+          offset_ff_dead ram_lost_on_deselect
 
 $(PROG).xex: $(PROG).s
 	$(CL65) -t atari -C atari-asm.cfg -o $@ $<
