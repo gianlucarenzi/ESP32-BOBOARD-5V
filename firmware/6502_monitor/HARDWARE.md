@@ -11,8 +11,9 @@ The ESP32 interfaces the Atari 800XL/130XE PBI (Parallel Bus Interface) to:
 - assert **MPD** (Math Pack Disable) and serve the ROM in the ROMSEL window only when the PBI latch is active
 
 All 5 V Atari signals pass through **TXS0108E** bidirectional level translators
-before reaching the 3.3 V ESP32 GPIOs.  The $D800–$DFFF chip-select is
-generated in hardware by a **74HC138** 3-to-8 decoder.
+before reaching the 3.3 V ESP32 GPIOs.  The board has no address decoder:
+ROMSEL ($D800–$DFFF, GPIO 23) and SEL_N ($D1XX / CCTL, GPIO 22) arrive on
+J3 pins 12 and 11 through U3, from the circuit connected to J3.
 
 ---
 
