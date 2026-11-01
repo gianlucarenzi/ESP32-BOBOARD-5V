@@ -15,7 +15,7 @@
 \maketitle
 \vspace{-4ex}
 
-Banked RAM PBI / CCTL peripheral: 20 bus signals, all through the TXS0108E level translators.
+Banked RAM PBI / CCTL peripheral (GeoRAM style): 20 bus signals, all through the TXS0108E level translators.
 
 \section{Data Bus (Bidirectional)}
 \begin{table}[H]
@@ -46,8 +46,8 @@ A4--A7  & GPIO 32, 33, 21, 27 & D32, D33, D21, D27 \\ \bottomrule
 \textbf{Signal} & \textbf{GPIO} & \textbf{Label} & \textbf{Dir} & \textbf{Description} \\ \midrule
 PHI2         & GPIO 2  & D2  & IN & 6502 System Clock (1.79\,MHz) \\
 R/W          & GPIO 15 & D15 & IN & Read/Write \\
-$\sim$D1XX   & GPIO 22 & D22 & IN & \$D100--\$D1FF window (MMU/PLA, Active Low) \\
-$\sim$CCTL   & GPIO 23 & D23 & IN & \$D500--\$D5FF window (MMU/PLA, Active Low) \\ \bottomrule
+$\sim$D1XX   & GPIO 22 & D22 & IN & \$D100--\$D1FF page (MMU/PLA, Active Low) \\
+$\sim$CCTL   & GPIO 23 & D23 & IN & \$D500--\$D5FF page (MMU/PLA, Active Low) \\ \bottomrule
 \end{tabular}
 \end{table}
 
@@ -78,8 +78,8 @@ GPIO 0  & BOOT & Not on the 30-pin headers \\ \bottomrule
 \section{Notes}
 \begin{itemize}
     \item \textbf{A0--A7 only:} the page (\$D1 or \$D5) comes from the select line.
-    \item \textbf{D0--D7} are driven only while the device answers a read of a selected window (RAM, bank count or bank register).
-    \item \textbf{Window map:} RAM \$xx00--\$xx7F, bank count \$xxFB--\$xxFC (R, 16 bit), bank register \$xxFD--\$xxFE (R/W, 16 bit), select latch \$xxFF (W, bit 7).
+    \item \textbf{D0--D7} are driven only to answer a read of the RAM page or of a register.
+    \item \textbf{One latch at a time:} \$80 to \$D1FF: registers \$D1xx, RAM \$D5xx; \$80 to \$D5FF: registers \$D5xx, RAM \$D100--\$D1FE. Count \$xxFB--FC, bank \$xxFD--FE, latch \$xxFF.
     \item U4 channel 8 (pins 9 / 12) and J3 pins 24--25 are unconnected.
     \item All signals pass through \textbf{TXS0108E} bidirectional level shifters (3.3\,V\,$\leftrightarrow$\,5\,V).
 \end{itemize}

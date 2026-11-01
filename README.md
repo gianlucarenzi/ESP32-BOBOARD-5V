@@ -43,7 +43,7 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 - Monitoraggio e debug di sistemi 6502
 - Implementazione di periferiche PBI per Atari
 - Analisi del traffico del bus dati/indirizzi
-- Espansioni RAM a banchi nell'area I/O ($D1xx / $D5xx)
+- Espansioni RAM a banchi nell'area I/O ($D1xx / $D5xx), stile GeoRAM
 - Sviluppo di cartucce intelligenti
 
 ## ✨ Caratteristiche Principali
@@ -58,12 +58,14 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 - **LED di stato** e pulsanti di controllo
 
 ### Firmware
-- **RAM a banchi PBI / CCTL senza ROM**: due finestre indipendenti, $D100–$D1FF (`~D1XX`) e $D500–$D5FF (`~CCTL`), decodificate dalla MMU/PLA dell'Atari; solo A0–A7 campionati
-- **Per finestra**: RAM a $xx00–$xx7F (128 byte del banco corrente), numero di banchi a $xxFB–$xxFC (sola lettura), registro del banco a 16 bit a $xxFD–$xxFE, latch di selezione a $xxFF (bit 7, ID dispositivo `$80`); da non selezionato non pilota mai il bus
-- **Banchi dall'heap**: all'avvio il firmware prende la DRAM libera dell'ESP32 e la divide fra le due finestre (stima 100–120 KB per finestra, il valore esatto è stampato all'avvio)
+- **RAM a banchi PBI / CCTL senza ROM, stile GeoRAM**: due pagine, $D100–$D1FF (`~D1XX`) e $D500–$D5FF (`~CCTL`), decodificate dalla MMU/PLA dell'Atari; solo A0–A7 campionati
+- **Un solo latch alla volta**: `$80` in $D1FF mette i registri in $D1xx e la RAM in $D500–$D5FF (256 byte); `$80` in $D5FF mette i registri in $D5xx e la RAM in $D100–$D1FE (255 byte: $D1FF, il registro PBI, è protetto salvo la build con `D1FF_RAM=1`); da non selezionato non pilota mai il bus
+- **Pagina dei registri**: numero di banchi a $xxFB–$xxFC (sola lettura), registro del banco a 16 bit a $xxFD–$xxFE, latch a $xxFF (bit 7, ID dispositivo `$80`)
+- **Banchi dall'heap**: all'avvio il firmware prende la DRAM libera dell'ESP32 in banchi da 256 byte, una sola RAM per le due modalità (stima 200–230 KB, il valore esatto è stampato all'avvio)
+- **Commodore 64 (ambiente `c64`)**: la stessa scheda sulla porta di espansione come GeoRAM compatibile: finestra RAM in IO1 $DE00–$DEFF, pagina in $DFFE e blocco da 16 KB in $DFFF (solo scrittura); /IO1 su J3 pin 12, /IO2 su J3 pin 11; circa 13 blocchi (210 KB) invece dei 32 di una GeoRAM da 512 KB
 - **Nessuna ROM, nessun MPD / EXTSEL**: tutti i pin del bus sono ingressi, D0–D7 diventano uscite solo per rispondere a una lettura
 - **Dual-core**: Core 1 dedicato al bus (interrupt mascherati, decodifica durante PHI1), Core 0 stampa il log
-- **Log lock-free** (Core 1 → Core 0): ogni accesso alle due finestre e ogni cambio di latch, con timestamp in microsecondi
+- **Log lock-free** (Core 1 → Core 0): ogni accesso alle due pagine e ogni cambio di latch, con timestamp in microsecondi
 
 ## 🔧 Specifiche Tecniche
 
@@ -89,8 +91,8 @@ ESP32-BOBOARD-5V è una scheda breakout specializzata progettata per interfaccia
 | **A4-A7** | GPIO32, GPIO33, GPIO21, GPIO27 | Address Bus |
 | **PHI2** | GPIO2 | Clock 6502 (1.79 MHz) |
 | **R/W** | GPIO15 | Read/Write |
-| **~D1XX** | GPIO22 | Finestra $D100–$D1FF, dalla MMU/PLA (Active Low, Input) |
-| **~CCTL** | GPIO23 | Finestra $D500–$D5FF, dalla MMU/PLA (Active Low, Input) |
+| **~D1XX** | GPIO22 | Pagina $D100–$D1FF, dalla MMU/PLA (Active Low, Input) |
+| **~CCTL** | GPIO23 | Pagina $D500–$D5FF, dalla MMU/PLA (Active Low, Input) |
 | **TX debug** | GPIO1 | Console seriale 115200 bps (anche su J4 pin 3) |
 
 Non usati dal firmware: GPIO12 (ancora collegato a U1 / J3 pin 4, pin di strapping), GPIO25 e GPIO26 (canali TXS0108E liberi), GPIO0 e GPIO3 (non portati su J3).
@@ -204,24 +206,34 @@ Il firmware è basato su FreeRTOS e utilizza entrambi i core dell'ESP32:
 
 #### 1. Ciclo di bus
 
-- **PHI1**: 200 ns dopo la discesa di PHI2 (`BUS_ADDR_SETTLE_NS`) campiona A0–A7, R/W, `~D1XX` e `~CCTL`; per una lettura della RAM o del registro del banco di una finestra selezionata scrive il byte in `GPIO.out` con le uscite ancora spente
+- **PHI1**: 200 ns dopo la discesa di PHI2 (`BUS_ADDR_SETTLE_NS`) campiona A0–A7, R/W, `~D1XX` e `~CCTL`; per una lettura della pagina RAM o di un registro della pagina dei registri scrive il byte in `GPIO.out` con le uscite ancora spente
 - **Salita di PHI2**: un solo store accende D0–D7; se la selezione compare solo sul fronte di salita, il byte viene pilotato in ritardo
 - **Scrittura**: il dato è campionato 120 ns dopo la salita di PHI2 (`BUS_WR_SAMPLE_NS`)
 - **Discesa di PHI2**: D0–D7 rilasciati; l'evento del ciclo va nel log durante la PHI1 successiva
 
-#### 2. RAM a banchi PBI / CCTL
+#### 2. RAM a banchi PBI / CCTL (stile GeoRAM)
 
-Le due finestre sono indipendenti: ognuna ha il proprio latch, il proprio registro del banco e la propria RAM.
+Una pagina contiene i registri, l'altra è una finestra di 256 byte sulla RAM, come la GeoRAM del C64 fra IO1 e IO2.  Un solo latch alla volta:
+
+| Latch scritto | Registri | Finestra RAM |
+|---------------|----------|--------------|
+| $D1FF ← `$80` | $D1xx | $D500–$D5FF (256 byte) |
+| $D5FF ← `$80` | $D5xx | $D100–$D1FE (255 byte; $D1FF protetto) |
+
+Da non selezionato $D1FF e $D5FF sono entrambi latch e nient'altro viene decodificato.  Nella pagina RAM il latch è RAM: per spostare i registri nell'altra pagina occorre prima deselezionare.
+
+Pagina dei registri:
 
 | Offset | Funzione | Note |
 |--------|----------|------|
-| **$00–$7F** | Finestra RAM (128 byte del banco corrente) | Lettura e scrittura solo con la finestra selezionata |
-| **$80–$FA** | Riservato | Mai pilotato, scritture ignorate |
-| **$FB–$FC** | Numero di banchi della finestra (R, 16 bit) | Dipende dall'heap libero, scritture ignorate |
+| **$00–$FA** | Riservato | Mai pilotato, scritture ignorate |
+| **$FB–$FC** | Numero di banchi (R, 16 bit) | Dipende dall'heap libero, scritture ignorate |
 | **$FD–$FE** | Registro del banco (R/W, 16 bit, little-endian) | Un banco oltre il numero disponibile non risponde |
-| **$FF** | Latch di selezione (W: bit 7) | Mai pilotato in lettura ($D1FF è lo stato IRQ PBI) |
+| **$FF** | Latch (W: bit 7 = 0 deseleziona) | Mai pilotato in lettura |
 
-I banchi vengono allocati all'avvio dall'heap DRAM libero dell'ESP32 (meno 24 KB di riserva per il sistema) e divisi in parti uguali fra le due finestre.  Indirizzo lineare nella RAM di una finestra: banco = indirizzo >> 7, offset = indirizzo & $7F.  Un ciclo su tutta la finestra: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.  All'accensione: non selezionata, banco 0, RAM a `$00`; la RAM non si conserva al reset dell'ESP32.  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF / $D5FF.
+$D1FF è il registro PBI dell'Atari (l'OS lo legge a ogni IRQ, gli altri dispositivi PBI lo pilotano): con la RAM in $D1xx resta protetto, mai pilotato e scritture ignorate.  Con `-D D1FF_RAM=1` diventa RAM anche lui, solo senza altri dispositivi PBI.
+
+I banchi da 256 byte vengono allocati all'avvio dall'heap DRAM libero dell'ESP32 (meno 24 KB di riserva per il sistema); una sola RAM e un solo registro del banco per le due modalità.  Indirizzo lineare: banco = indirizzo >> 8, offset = indirizzo & $FF.  All'accensione: non selezionato, banco 0, RAM a `$00`; il dispositivo non vede il RESET dell'Atari e mantiene lo stato, la RAM non si conserva al reset dell'ESP32.  Senza ROM la scansione PBI dell'OS non trova la firma a $D803 / $D80B e salta il dispositivo: i programmi lo selezionano direttamente scrivendo `$80` in $D1FF / $D5FF.
 
 ## 🚀 Installazione e Setup
 
@@ -292,19 +304,21 @@ Il formato è `[secondi.microsecondi]`:
 
 ```
 [6502_monitor] Banked RAM PBI / CCTL peripheral, device ID $80
-[6502_monitor] $D100-$D17F / $D500-$D57F: <n> banks x 128 bytes = <k> KB per window
-[6502_monitor] Count $xxFB-$xxFC, bank $xxFD-$xxFE, select $xxFF; <b> heap blocks, <h> bytes of heap left
+[6502_monitor] <n> banks x 256 bytes = <k> KB, <b> heap blocks, <h> bytes of heap left
+[6502_monitor] $D1FF <- $80: RAM $D500-$D5FF; $D5FF <- $80: RAM $D100-$D1FE ($D1FF protected)
+[6502_monitor] Register page: count $xxFB-$xxFC, bank $xxFD-$xxFE, latch $xxFF
 [6502_monitor] Bus loop on Core 1 (settle 200 ns, write sample 120 ns), log 115200 baud
-[    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
+[    1.234567] [D1FF - PBI_SELECT          ] W $80  SELECTED: registers $D1xx, RAM $D5xx
 [    1.234601] [D1FD - BANK_SELECT_L       ] W $03  SEL
 [    1.234620] [D1FE - BANK_SELECT_H       ] W $01  SEL
-[    1.234640] [D105 - RAM bank $0103 +$05 ] W $AA  SEL
-[    1.234680] [D105 - RAM bank $0103 +$05 ] R $AA  SEL DRV
-[    1.300000] [D500 - RAM bank $0000 +$00 ] R $FF  -
+[    1.234640] [D505 - RAM bank $0103 +$05 ] W $AA  SEL
+[    1.234680] [D505 - RAM bank $0103 +$05 ] R $AA  SEL DRV
+[    1.300000] [D105 - RESERVED            ] R $FF  SEL
+```
 ```
 
 - `PBI_SELECT` / `CCTL_SELECT` — scrittura del latch e nuovo stato: `SELECTED` / `DESELECTED`
-- `SEL` = dispositivo selezionato in quella finestra, `DRV` = byte pilotato dal dispositivo, `-` = non selezionato (il byte è quello presente sul bus)
+- `SEL` = dispositivo selezionato, `DRV` = byte pilotato dal dispositivo, `-` = non selezionato (il byte è quello presente sul bus)
 - Gli offset sono mostrati come `RAM bank $bbbb +$oo`, `BANK_COUNT_L/H`, `BANK_SELECT_L/H`, `PBI_SELECT` / `CCTL_SELECT` o `RESERVED`; i numeri di banchi nell'esempio sono indicativi
 - Il timestamp viene dal contatore di cicli del Core 1 (CCOUNT esteso a 64 bit)
 - Ogni riga è una sola `Serial.write()`: le righe non si mescolano mai; gli eventi persi quando il ring è pieno vengono contati
@@ -321,16 +335,16 @@ flowchart TD
     C --> D[PHI2 scende: rilascia D0-D7, log del ciclo precedente]
     D --> E[Attesa BUS_ADDR_SETTLE_NS]
     E --> F[Campiona A0-A7, R/W, ~D1XX, ~CCTL]
-    F --> G{Lettura di RAM o banco con la finestra selezionata?}
+    F --> G{Lettura della pagina RAM o di un registro?}
     G -->|Sì| H[Byte in GPIO.out, uscite spente]
     G -->|No| I[Nessuna uscita]
     H --> J[PHI2 sale: accende D0-D7]
     I --> K[PHI2 sale]
     J --> L[Attesa discesa PHI2]
-    K --> M{Scrittura in una finestra?}
-    M -->|Sì $xxFF| N[Aggiorna il latch con il bit 7]
-    M -->|Sì $xxFD-$xxFE| Q[Cambia banco se selezionata]
-    M -->|Sì $xx00-$xx7F| O[Salva in RAM se selezionata]
+    K --> M{Scrittura in una pagina?}
+    M -->|Sì latch| N[Bit 7: registri in questa pagina, RAM nell'altra; 0: deseleziona]
+    M -->|Sì $xxFD-$xxFE registri| Q[Cambia banco]
+    M -->|Sì pagina RAM| O[Salva in RAM]
     M -->|No| P[Campiona il dato letto per il log]
     N --> L
     Q --> L
@@ -352,15 +366,15 @@ sequenceDiagram
     participant L  as Log ring
 
     CPU->>ESP: Write $80 → $D1FF
-    ESP->>ESP: selezionato (bit 7 = 1)
+    ESP->>ESP: registri in $D1xx, RAM in $D5xx
     ESP->>L: PBI_SELECT SELECTED
 
     CPU->>ESP: Write $03 → $D1FD, $00 → $D1FE
     ESP->>ESP: banco = $0003
-    loop Accessi $D100-$D17F
-        CPU->>ESP: STA $D1xx
+    loop Accessi $D500-$D5FF
+        CPU->>ESP: STA $D5xx
         ESP->>ESP: ram[3][xx] = dato
-        CPU->>ESP: LDA $D1xx
+        CPU->>ESP: LDA $D5xx
         ESP->>CPU: pilota ram[3][xx] su D0-D7
         ESP->>L: evento R/W
     end
@@ -411,7 +425,7 @@ gantt
 ### Performance del Monitor
 
 - **Campionamento**: un ciclo di bus per volta, Core 1 dedicato al 100%
-- **Risposta in lettura**: byte (RAM del banco o registro del banco) preparato durante PHI1, uscite accese subito dopo la salita di PHI2 (da misurare all'oscilloscopio)
+- **Risposta in lettura**: byte (RAM del banco o registro) preparato durante PHI1, uscite accese subito dopo la salita di PHI2 (da misurare all'oscilloscopio)
 - **Throughput seriale**: 115200 baud per debug (`LOG_BAUD`)
 - **Compatibilità**: Atari PAL (1.77 MHz) e NTSC (1.79 MHz)
 

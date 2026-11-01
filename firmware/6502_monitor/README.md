@@ -1,68 +1,89 @@
 # Atari Banked RAM PBI / CCTL Peripheral & Bus Monitor
 
-ESP32 firmware for the ESP32-BOBOARD-5V that behaves as a small banked RAM
-expansion in the Atari I/O area, in two independent windows, `$D100-$D1FF`
-(PBI) and `$D500-$D5FF` (CCTL), and logs every access to both windows over a
+ESP32 firmware for the ESP32-BOBOARD-5V that behaves as a banked RAM
+expansion in the Atari I/O area, GeoRAM style: one page holds the registers,
+the other one is a 256-byte window on the RAM.  The two pages are `$D100-$D1FF`
+(PBI) and `$D500-$D5FF` (CCTL); every access to both is logged over a
 lock-free ring buffer.
 
 ## Features
-- **Two independent windows**, selected by the Atari MMU / PLA:
+- **Two pages**, selected by the Atari MMU / PLA (on a C64 the same two
+  select pins would be IO1 / IO2):
     - `~D1XX` → `$D100-$D1FF`
     - `~CCTL` → `$D500-$D5FF`
 
   Only A0-A7 are sampled: the page comes from the select line.
-- **Register map** (same in both windows, each with its own state):
+- **One latch at a time.**  Deselected, `$D1FF` and `$D5FF` are both select
+  latches (W, bit 7 = device ID `$80`) and nothing else is decoded.  Writing
+  `$80` to one of them selects the device with the registers in that page and
+  the RAM in the other one:
+
+  | Latch written | Registers | RAM window |
+  |---|---|---|
+  | `$D1FF` ← `$80` | `$D1xx` | `$D500-$D5FF` (256 bytes) |
+  | `$D5FF` ← `$80` | `$D5xx` | `$D100-$D1FE` (255 bytes) |
+
+  `$D1FF` is the PBI interrupt / select register of the Atari: with the RAM
+  in `$D1xx` it is protected (never driven, writes ignored).  Build with
+  `-D D1FF_RAM=1` to make it RAM too, only without other PBI devices (the OS
+  reads `$D1FF` on every IRQ, other PBI devices drive it).
+- **Register page:**
 
   | Offset | Function |
   |---|---|
-  | `$00-$7F` | RAM window: 128 bytes of the current bank (R/W) |
-  | `$80-$FA` | reserved: never driven, writes ignored |
-  | `$FB-$FC` | number of banks of the window (R, 16 bit, little-endian) |
+  | `$00-$FA` | reserved: never driven, writes ignored |
+  | `$FB-$FC` | number of banks (R, 16 bit, little-endian) |
   | `$FD-$FE` | bank register (R/W, 16 bit, little-endian) |
-  | `$FF` | select latch (W): bit 7 = device ID `$80`; never driven on reads |
+  | `$FF` | latch (W): bit 7 = 0 deselects; never driven on reads |
 
-  The banks are allocated at boot from the free ESP32 DRAM heap (every
-  byte-addressable block, minus `BANK_HEAP_RESERVE` = 24 KB for the system)
-  and split evenly between the two windows: an estimated 100-120 KB per
-  window, to be confirmed on the board (the exact count is printed at boot
-  and readable at `$xxFB-$xxFC`).  A bank number at or beyond the count selects no RAM:
-  the window is not driven and writes are ignored.  Linear address in a
-  window's RAM: bank = address >> 7, offset = address & `$7F`.  A 6502 loop
-  over the whole window: `LDX #$7F` / `LDA $D100,X` / … / `DEX` / `BPL`.
-- **PBI rules:** a write to `$D1FF` / `$D5FF` selects the device in that
-  window when bit 7 is 1 and deselects it when bit 7 is 0.  Not selected,
-  the device never drives the bus and ignores writes to RAM and registers.  Power-up: deselected, bank 0, RAM `$00`; RAM is not kept across
-  an ESP32 reset.
+  The latch of the RAM page is RAM: to move the registers to the other page,
+  deselect first.  One RAM and one bank register for both modes: bank n is
+  the same 256 bytes whichever page shows it.
+- **Banks:** 256 bytes each, allocated at boot from the free ESP32 DRAM heap
+  (every byte-addressable block, minus `BANK_HEAP_RESERVE` = 24 KB for the
+  system): an estimated 200-230 KB in total, to be confirmed on the board
+  (the exact count is printed at boot and readable at `$xxFB-$xxFC`).  A
+  bank number at or beyond the count selects no RAM: the RAM page is not
+  driven and writes are ignored.  Linear address: bank = address >> 8,
+  offset = address & `$FF`, as on a GeoRAM.
+- **State:** power-up deselected, bank 0, RAM `$00`.  The device does not
+  see the Atari RESET, so its state is kept across it; RAM is not kept
+  across an ESP32 reset.
 - **No ROM, no MPD, no EXTSEL:** the OS PBI scan finds no signature at
   `$D803` / `$D80B` and skips the device; programs select it directly by
-  writing `$80` to `$D1FF` / `$D5FF` (and `$00` to release it).
-- **Bus monitor:** every access to both windows is logged, selected or not;
+  writing `$80` to `$D1FF` / `$D5FF` (and `$00` to release it).  The scan
+  (power-up and every RESET) writes `$80` then `$00` to `$D1FF`: the device
+  ends deselected, unless the registers are in `$D5xx` (then `$D1FF` is
+  protected, or, with `D1FF_RAM`, the scan overwrites byte `$FF` of the
+  current bank).
+- **Bus monitor:** every access to both pages is logged, selected or not;
   reads of other devices are sampled just before PHI2 falls.
 - **Serial output** (`LogTask` on Core 0, the only writer on Serial, 115200
   baud by default, `-D LOG_BAUD=...`; each line is one `Serial.write()`, so
   lines never interleave):
     ```
-    [    1.234567] [D1FF - PBI_SELECT          ] W $80  device SELECTED
+    [    1.234567] [D1FF - PBI_SELECT          ] W $80  SELECTED: registers $D1xx, RAM $D5xx
     [    1.234601] [D1FD - BANK_SELECT_L       ] W $03  SEL
     [    1.234620] [D1FE - BANK_SELECT_H       ] W $01  SEL
-    [    1.234640] [D105 - RAM bank $0103 +$05 ] W $AA  SEL
-    [    1.234680] [D105 - RAM bank $0103 +$05 ] R $AA  SEL DRV
-    [    1.300000] [D500 - RAM bank $0000 +$00 ] R $FF  -
+    [    1.234640] [D505 - RAM bank $0103 +$05 ] W $AA  SEL
+    [    1.234680] [D505 - RAM bank $0103 +$05 ] R $AA  SEL DRV
+    [    1.300000] [D105 - RESERVED            ] R $FF  SEL
     ```
-  `SEL` = device selected in that window, `DRV` = byte driven by the device,
-  `-` = not selected (the logged byte is whatever was on the bus).
+  `SEL` = device selected, `DRV` = byte driven by the device, `-` =
+  deselected (the logged byte is whatever was on the bus).
   Timestamps come from the Core 1 cycle counter (CCOUNT extended to 64 bit),
   in µs since the bus loop started.  Events are dropped and counted when the
-  1024-entry ring is full: a block copy through the window easily fills it.
+  1024-entry ring is full: a block copy through the RAM page easily fills it.
 - **Bus loop:** IRAM-resident `MonitorTask` owns Core 1 (interrupts masked,
   interrupt watchdog disabled, no FreeRTOS calls).  `~D1XX` is not
-  PHI2-qualified, so A0-A7, R/W and the window selects are decoded during PHI1
+  PHI2-qualified, so A0-A7, R/W and the page selects are decoded during PHI1
   (`BUS_ADDR_SETTLE_NS`, default 200 ns after PHI2 falls) and the read byte
   (RAM of the current bank or a register) is already in `GPIO.out` when
   PHI2 rises: one store turns D0-D7 on.  The PHI1 decode is inline assembly
-  (29 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM
-  read), with the window state in a fixed-layout struct (RAM pointer of the
-  current bank, latch, count and bank registers) and a 256-entry table for
+  (25 instructions from the `GPIO.in` load to the `GPIO.out` store for a RAM
+  read in `$D1xx`, 27 in `$D5xx`), with the device state in a fixed-layout
+  struct (RAM pointer of the current bank per page, RAM page size, count and
+  bank registers, register page) and a 256-entry table for
   the byte-to-pins conversion.  A
   select that appears only on the rising edge is handled from that sample
   (late drive).  Write data is sampled `BUS_WR_SAMPLE_NS` (default 120 ns)
@@ -71,9 +92,55 @@ lock-free ring buffer.
 
 ## Atari Test Program
 [`atari-test/`](atari-test/README.md): `banked_ram_test.xex` (cc65) checks
-bank count, 16-bit bank register, deselect protection, a march over every
-bank, the bank limit and window independence in `$D1xx` and `$D5xx`.  `make sim` / `make simall` run it on
+in both modes (RAM in `$D5xx`, then in `$D1xx`) bank count, 16-bit bank
+register, one latch at a time, deselect protection, the RAM shared by the
+two pages, a march over every bank and the bank limit; then the protected
+`$D1FF`.  `make sim` / `make simall` run it on
 py65 against a model of the device, with injected faults.
+
+## Commodore 64: GeoRAM (env `c64`)
+`pio run -e c64` builds the same board as a GeoRAM-compatible expansion for
+the C64 expansion port (`-D BUS_C64=1`):
+
+| Address | Function |
+|---|---|
+| `$DE00-$DEFF` (/IO1) | 256-byte window on the RAM (R/W) |
+| `$DFFE` (/IO2) | page within the 16 KB block, bits 0-5 (W) |
+| `$DFFF` (/IO2) | block (W) |
+
+Always enabled, no latch; the registers are write-only as on the original
+GeoRAM (software keeps a copy) and the rest of IO2 is not decoded.  RAM
+address = block × 16384 + page × 256 + offset.  Only whole 16 KB blocks are
+used (about 13 with ~210 KB of heap, printed at boot): a block beyond them
+is not driven and writes are ignored, while a real 512 KB GeoRAM has 32
+blocks.  Software that requires 512 KB will not work.
+
+The VIC-II owns the bus during PHI1, so the C64 loop decodes while PHI2 is
+high: address, R/W and /IO1 / /IO2 sampled `BUS_ADDR_SETTLE_NS` (default
+200 ns) after PHI2 rises, read data driven until PHI2 falls (needed 100 ns
+before the fall, ~490 ns after the rise), write data sampled
+`BUS_WR_SAMPLE_NS` (default 300 ns) after the rise.  Timing to be measured
+on the real bus.
+
+Wiring (the C64 port pins are from the standard pinout: check them against
+your schematic before soldering):
+
+| Signal | C64 expansion port | J3 |
+|---|---|---|
+| /IO1 | 7 | 12 (GPIO23, `~CCTL` input) |
+| /IO2 | 10 | 11 (GPIO22, `~D1XX` input) |
+| D0 / D1 / D2 / D3 | 21 / 20 / 19 / 18 | 2 / 3 / 5 / 6 |
+| D4 / D5 / D6 / D7 | 17 / 16 / 15 / 14 | 22 / 23 / 8 / 9 |
+| A0 / A1 / A2 / A3 | Y / X / W / V | 18 / 19 / 20 / 21 |
+| A4 / A5 / A6 / A7 | U / T / S / R | 16 / 17 / 10 / 15 |
+| Φ2 | E | 1 |
+| R/W | 5 | 7 |
+| GND | 1, 22, A, Z | 29, 30 |
+| +5V | 2, 3 | 31, 32 |
+
+Log lines: `[DE05 - RAM blk $03 pg $10 +$05] R $AA  SEL DRV`,
+`GEORAM_PAGE`, `GEORAM_BLOCK`.  As on the Atari, the module is programmed
+only disconnected from the computer, from the PC.
 
 ## Hardware Setup
 Refer to the following documents for detailed pinout:
@@ -87,7 +154,9 @@ This project uses **PlatformIO**.
 - Tool: `clang-format`.
 
 ### Configuration
-One build environment, `nodemcu-32s`, serves both windows.  Bus timing can be
+Two build environments: `nodemcu-32s` (Atari, both pages) and `c64`
+(GeoRAM, see above).  On the Atari `-D D1FF_RAM=1`
+makes `$D1FF` RAM (see above).  Bus timing can be
 tuned with `-D BUS_ADDR_SETTLE_NS=...`, `-D BUS_WR_SAMPLE_NS=...` and
 `-D BUS_PHI2_HIGH_MAX_NS=...` after measuring the real bus.
 

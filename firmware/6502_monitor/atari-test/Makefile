@@ -1,14 +1,15 @@
 # Atari test program for the 6502_monitor banked RAM (cc65 toolchain).
 #   make          build banked_ram_test.xex
 #   make sim      run it on py65 against a model of the device (needs py65),
-#                 300 banks per window
+#                 300 banks
 #   make simall   same, with every injected fault: each must be detected
 
 PROG   := banked_ram_test
 CL65   ?= cl65
 PYTHON ?= python3
-FAULTS := bankreg_ignored bank_hi_ignored latch_ignored stuck_d3 alias_a6 \
-          shared_windows writes_when_deselected limit_wraps count_writable
+FAULTS := bankreg_ignored bank_hi_ignored both_latches stuck_d3 alias_a6 \
+          separate_ram writes_when_deselected limit_wraps count_writable \
+          d1ff_unprotected
 
 $(PROG).xex: $(PROG).s
 	$(CL65) -t atari -C atari-asm.cfg -o $@ $<

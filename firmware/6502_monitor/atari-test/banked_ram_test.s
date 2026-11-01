@@ -1,39 +1,45 @@
 ;
 ; banked_ram_test.s -- Atari test program for the 6502_monitor banked RAM
 ;
-; Tests both windows of the ESP32-BOBOARD-5V banked RAM peripheral:
-;   $xx00-$xx7F  RAM window (128 bytes of the current bank)
-;   $xxFB-$xxFC  number of banks of the window (R, 16 bit)
+; The device (GeoRAM style) uses two pages, $D1xx (PBI, ~D1XX) and $D5xx
+; (CCTL, ~CCTL); only one latch at a time:
+;   $D1FF <- $80   registers in $D1xx, RAM $D500-$D5FF (256 bytes)
+;   $D5FF <- $80   registers in $D5xx, RAM $D100-$D1FE (255 bytes, $D1FF
+;                  protected; 256 bytes with the firmware option D1FF_RAM)
+; Register page:
+;   $xxFB-$xxFC  number of banks (R, 16 bit)
 ;   $xxFD-$xxFE  bank register (R/W, 16 bit)
-;   $xxFF        select latch (W, bit 7 = device ID $80)
-; with xx = $D1 (PBI, ~D1XX) and $D5 (CCTL, ~CCTL).  The number of banks
-; depends on the ESP32 heap and is read from $xxFB-$xxFC.
+;   $xxFF        latch (W): bit 7 = 0 deselects
+; One RAM and one bank register for both modes.
 ;
-; Per window:
-;   1. COUNT     number of banks (printed), not 0, read-only
-;   2. BANK REG  write / read back the 16-bit bank register: low byte
+; For each mode (registers $D1 / RAM $D5, then registers $D5 / RAM $D1):
+;   1. COUNT     number of banks (printed), not 0, read-only, the same in
+;                both modes
+;   2. SHARED    (second mode) the RAM written through the first page reads
+;                the same through the second one
+;   3. BANK REG  write / read back the 16-bit bank register: low byte
 ;                $00-$FF with high byte $00, $55, $AA, $FF
-;   3. PROTECT   deselected (latch written with $7F: bit 7 = 0, other bits
-;                set) the device must ignore RAM and bank register writes;
-;                reselected with $81 (bit 7 = 1) the old values are back
-;   4. MARCH     fill every bank, verify; then the complement, verify.
+;   4. EXCL      $80 written to the latch offset of the RAM page must not
+;                move the registers (one latch at a time)
+;   5. PROTECT   deselected ($7F: bit 7 = 0, other bits set) the device
+;                ignores RAM and bank register writes; reselected ($81) the
+;                old values are back
+;   6. MARCH     fill every bank, verify; then the complement, verify.
 ;                Bytes 0-1 of each bank hold the bank number, the others
-;                offset EOR bank lo EOR bank hi: stuck data bits, address
-;                aliasing and banks that alias each other
-;   5. LIMIT     writes to bank = count (beyond the RAM) must not land in
+;                offset EOR bank lo EOR bank hi EOR key
+;   7. LIMIT     writes to bank = count (no RAM behind it) do not land in
 ;                the first or the last bank
 ; Then:
-;   6. KEEP      window $D1 again, after the $D5 tests and a deselect: its
-;                last pattern must still be there (windows independent,
-;                RAM kept while deselected)
+;   8. D1FF      $D1FF written while the RAM is in $D1xx: ignored (or RAM
+;                with D1FF_RAM = 1), and never a second latch
 ;
 ; Errors are counted on 24 bits; the first four of each test are printed as
-;   ERR D1 B=bbbb O=oo E=ee G=gg   (window, bank, offset, expected, got).
-; At the end both windows are deselected.  Run time grows with the number
-; of banks: a few seconds per 64 KB.
+;   ERR D5 B=bbbb O=oo E=ee G=gg   (page, bank, offset, expected, got).
+; At the end the device is deselected.  Run time grows with the number of
+; banks: about 30 s for 220 KB.
 ;
 ; Do not run with a cartridge that uses CCTL ($D5xx) for bank switching
-; (XEGS, AtariMax, SpartaDOS X, ...): set TEST_CCTL = 0 to skip $D5xx.
+; (XEGS, AtariMax, SpartaDOS X, ...): the device needs both pages.
 ;
 ; Build:  cl65 -t atari -C atari-asm.cfg -o banked_ram_test.xex banked_ram_test.s
 ; Style: ca65, Atari OS CIO for the screen output (E:).
@@ -43,9 +49,8 @@
 
         .export start
 
-TEST_CCTL  = 1                  ; 0 = test only the $D1xx window
+D1FF_RAM   = 0                  ; 1 if the firmware is built with D1FF_RAM=1
 
-RAM_SIZE   = $80                ; RAM window $xx00-$xx7F
 COUNT_L    = $FB                ; number of banks
 COUNT_H    = $FC
 BANK_L     = $FD                ; bank register
@@ -57,13 +62,18 @@ MAX_REPORT = 4                  ; detailed error lines per test
 ; ---------------------------------------------------------------------------
         .segment "ZEROPAGE"
 
-ptr:      .res 2                ; window base: $D100 / $D500
+ptr:      .res 2                ; register page: $D100 / $D500
+dptr:     .res 2                ; RAM page:      $D500 / $D100
 sptr:     .res 2                ; string pointer for print
 bank:     .res 2                ; current bank
-count:    .res 2                ; banks of the window
+count:    .res 2                ; number of banks
+count0:   .res 2                ; number of banks seen in the first mode
+top:      .res 1                ; last RAM offset of the RAM page ($FF / $FE)
+mode:     .res 1                ; 0 = first mode, 1 = second mode
 bk:       .res 1                ; bank lo EOR bank hi EOR key
-key:      .res 1                ; window key EOR pass inversion
-wkey:     .res 1                ; window key
+key:      .res 1                ; pattern key
+wkey:     .res 1                ; key of the mode
+epage:    .res 1                ; page printed by report
 errs:     .res 3                ; total errors (24 bit)
 terrs:    .res 3                ; errors at the start of the current test
 reported: .res 1                ; detailed error lines printed in this test
@@ -87,49 +97,33 @@ start:
         sta     errs
         sta     errs+1
         sta     errs+2
+        sta     ptr
+        sta     dptr
+        sta     count0
+        sta     count0+1
+        jsr     deselect_all
 
         PRINT   s_title
 
-        lda     #$D1
-        ldx     #$00
-        jsr     test_window
-
-.if TEST_CCTL
-        lda     #$D5
-        ldx     #$A5
-        jsr     test_window
-.endif
-
-        ; 6. KEEP: $D1 window still holds its complemented pattern.
-        PRINT   s_keep
-        jsr     test_begin
-        lda     #$D1
-        sta     ptr+1
-        lda     #0
-        sta     ptr
+        lda     #0                      ; registers $D1, RAM $D5
+        sta     mode
         sta     wkey
-        jsr     select
-        jsr     read_count
-        lda     #$FF
-        eor     wkey
-        sta     key
-        lda     count
-        ora     count+1
-        beq     @keep_done
-        jsr     verify_all
-@keep_done:
-        jsr     deselect
-        jsr     test_end
-
-        ; Summary.
-.if TEST_CCTL
-        lda     #$D5
-        sta     ptr+1
-        jsr     deselect
-.endif
         lda     #$D1
-        sta     ptr+1
-        jsr     deselect
+        ldx     #$D5
+        ldy     #$FF
+        jsr     test_mode
+
+        lda     #1                      ; registers $D5, RAM $D1
+        sta     mode
+        lda     #$A5
+        sta     wkey
+        lda     #$D5
+        ldx     #$D1
+        ldy     #(D1FF_RAM * $FF) | ((1 - D1FF_RAM) * $FE)
+        jsr     test_mode
+
+        jsr     test_d1ff
+        jsr     deselect_all
 
         lda     errs
         ora     errs+1
@@ -150,19 +144,31 @@ halt:
         jmp     halt
 
 ; ---------------------------------------------------------------------------
-; test_window: A = page ($D1 / $D5), X = pattern key of the window.
+; test_mode: A = register page, X = RAM page, Y = last RAM offset.
 ; ---------------------------------------------------------------------------
-test_window:
+test_mode:
         sta     ptr+1
-        lda     #0
-        sta     ptr
-        stx     wkey
+        stx     dptr+1
+        sty     top
+
+        PRINT   s_sel                   ; "SELECT $D1FF, RAM $D500-$D5FF"
+        lda     ptr+1
+        jsr     phex
+        PRINT   s_selram
+        lda     dptr+1
+        jsr     phex
+        PRINT   s_selto
+        lda     dptr+1
+        jsr     phex
+        lda     top
+        jsr     phex
+        lda     #ATEOL
+        jsr     putc
         jsr     select
 
         ; 1. COUNT
-        jsr     print_win
         PRINT   s_count
-        jsr     test_begin
+        jsr     test_reg
         jsr     read_count
         lda     count+1
         jsr     phex
@@ -182,6 +188,33 @@ test_window:
         sta     offs
         jsr     report
 @cnt_nz:
+        lda     mode                    ; second mode: same count
+        beq     @cnt_first
+        lda     count
+        cmp     count0
+        bne     @cnt_diff_l
+        lda     count+1
+        cmp     count0+1
+        beq     @cnt_same
+        sta     got
+        lda     count0+1
+        ldx     #COUNT_H
+        jmp     @cnt_diff
+@cnt_diff_l:
+        sta     got
+        lda     count0
+        ldx     #COUNT_L
+@cnt_diff:
+        sta     expect
+        stx     offs
+        jsr     report
+        jmp     @cnt_same
+@cnt_first:
+        lda     count
+        sta     count0
+        lda     count+1
+        sta     count0+1
+@cnt_same:
         lda     count                   ; read-only: writes ignored
         eor     #$FF
         ldy     #COUNT_L
@@ -214,11 +247,22 @@ test_window:
         bne     @bankreg
         jmp     @done                   ; nothing else to test
 
-        ; 2. BANK REG: lo $00-$FF with hi $00, $55, $AA, $FF.
+        ; 2. SHARED: second mode, the first mode's last pattern (before
+        ; any RAM write of this mode).
 @bankreg:
-        jsr     print_win
+        lda     mode
+        beq     @br_start
+        PRINT   s_shared
+        jsr     test_ram
+        lda     #$FF                    ; first mode: wkey 0, complement
+        sta     key
+        jsr     verify_all
+        jsr     test_end
+
+        ; 3. BANK REG: lo $00-$FF with hi $00, $55, $AA, $FF.
+@br_start:
         PRINT   s_bankreg
-        jsr     test_begin
+        jsr     test_reg
         ldx     #3
 @br_hi:
         lda     hi_values,x
@@ -229,76 +273,64 @@ test_window:
         lda     hi
         sta     bank+1
         jsr     write_bank
-        ldy     #BANK_L
-        lda     (ptr),y
-        cmp     bank
-        bne     @br_err_l
-        ldy     #BANK_H
-        lda     (ptr),y
-        cmp     bank+1
-        beq     @br_ok
-        sta     got
-        lda     bank+1
-        jmp     @br_rep
-@br_err_l:
-        sta     got
-        lda     bank
-@br_rep:
-        sta     expect
-        sty     offs
         txa
         pha
-        jsr     report
+        jsr     check_bank
         pla
         tax
-@br_ok:
         inc     bank
         bne     @br_lo
         dex
         bpl     @br_hi
         jsr     test_end
 
-        ; 3. PROTECT
-        jsr     print_win
+        ; 4. EXCL: the latch offset of the RAM page is not a latch.
+        PRINT   s_excl
+        jsr     test_reg
+        lda     #$02
+        sta     bank
+        lda     #$01
+        sta     bank+1
+        jsr     write_bank
+        lda     #DEV_ID
+        ldy     #LATCH
+        sta     (dptr),y
+        jsr     check_bank              ; registers still in this page
+        jsr     test_end
+
+        ; 5. PROTECT
         PRINT   s_protect
-        jsr     test_begin
+        jsr     test_reg
         lda     #0                      ; bank 0, offset 0 = $11
         sta     bank
         sta     bank+1
         jsr     write_bank
         lda     #$11
         ldy     #0
-        sta     (ptr),y
+        sta     (dptr),y
         lda     #$7F                    ; deselect: bit 7 = 0
         ldy     #LATCH
         sta     (ptr),y
         lda     #$EE                    ; must be ignored
         ldy     #0
+        sta     (dptr),y
         sta     (ptr),y
-        lda     #$07                    ; must be ignored
+        lda     #$07                    ; must be ignored, in both pages
         ldy     #BANK_L
         sta     (ptr),y
+        sta     (dptr),y
         ldy     #BANK_H
         sta     (ptr),y
+        sta     (dptr),y
         lda     #DEV_ID | $01           ; select: bit 7 = 1
         ldy     #LATCH
         sta     (ptr),y
-        ldy     #BANK_L                 ; bank still 0
-        lda     (ptr),y
-        bne     @pr_bank_err
-        ldy     #BANK_H
-        lda     (ptr),y
-        beq     @pr_bank_ok
-@pr_bank_err:
-        sta     got
-        sty     offs
-        lda     #0
-        sta     expect
-        jsr     report
-@pr_bank_ok:
+        jsr     check_bank              ; bank still 0
         jsr     write_bank              ; force bank 0 for the RAM check
+        lda     dptr+1
+        sta     epage
         ldy     #0                      ; offset 0 still $11
-        lda     (ptr),y
+        lda     (dptr),y
         cmp     #$11
         beq     @pr_ram_ok
         sta     got
@@ -310,10 +342,9 @@ test_window:
 @pr_ram_ok:
         jsr     test_end
 
-        ; 4. MARCH: pattern, then complement.
-        jsr     print_win
+        ; 6. MARCH: pattern, then complement.
         PRINT   s_march
-        jsr     test_begin
+        jsr     test_ram
         lda     wkey
         sta     key
         jsr     fill_all
@@ -325,10 +356,9 @@ test_window:
         jsr     verify_all
         jsr     test_end
 
-        ; 5. LIMIT: bank = count has no RAM behind it.
-        jsr     print_win
+        ; 7. LIMIT: bank = count has no RAM behind it.
         PRINT   s_limit
-        jsr     test_begin
+        jsr     test_ram
         lda     count
         sta     bank
         lda     count+1
@@ -336,11 +366,11 @@ test_window:
         jsr     write_bank
         lda     #$5A
         ldy     #0
-        sta     (ptr),y
+        sta     (dptr),y
         ldy     #1
-        sta     (ptr),y
-        ldy     #RAM_SIZE - 1
-        sta     (ptr),y
+        sta     (dptr),y
+        ldy     top
+        sta     (dptr),y
         lda     #0                      ; first bank intact
         sta     bank
         sta     bank+1
@@ -362,8 +392,66 @@ test_window:
 hi_values: .byte $00, $55, $AA, $FF
 
 ; ---------------------------------------------------------------------------
+; 8. D1FF: with the RAM in $D1xx, $D1FF is not RAM (protected) and never a
+; latch.  Bank 0 byte $FF is written as $A5 through $D5FF, then $DA (bit 7
+; set) through $D1FF; read back through $D5FF.
+; ---------------------------------------------------------------------------
+test_d1ff:
+        PRINT   s_d1ff
+        jsr     test_begin
+        lda     count0
+        ora     count0+1
+        beq     @done
+
+        lda     #$D1                    ; registers $D1, RAM $D5
+        sta     ptr+1
+        lda     #$D5
+        sta     dptr+1
+        jsr     select
+        lda     #0
+        sta     bank
+        sta     bank+1
+        jsr     write_bank
+        lda     #$A5
+        sta     $D5FF
+        jsr     deselect
+
+        lda     #$D5                    ; registers $D5, RAM $D1
+        sta     ptr+1
+        lda     #$D1
+        sta     dptr+1
+        jsr     select
+        jsr     write_bank              ; bank 0
+        lda     #$DA
+        sta     $D1FF
+        jsr     check_bank              ; registers still in $D5xx
+        jsr     deselect
+
+        lda     #$D1                    ; registers $D1, RAM $D5
+        sta     ptr+1
+        lda     #$D5
+        sta     dptr+1
+        jsr     select
+        jsr     write_bank              ; bank 0
+        lda     #$D5
+        sta     epage
+        lda     $D5FF
+        cmp     #(D1FF_RAM * $DA) | ((1 - D1FF_RAM) * $A5)
+        beq     @ok
+        sta     got
+        lda     #(D1FF_RAM * $DA) | ((1 - D1FF_RAM) * $A5)
+        sta     expect
+        lda     #LATCH
+        sta     offs
+        jsr     report
+@ok:
+        jsr     deselect
+@done:
+        jmp     test_end
+
+; ---------------------------------------------------------------------------
 ; Bank patterns.  Bank b, key k:  byte 0 = b lo EOR k, byte 1 = b hi EOR k,
-; byte n (2-$7F) = n EOR b lo EOR b hi EOR k.
+; byte n (2-top) = n EOR b lo EOR b hi EOR k.
 ; ---------------------------------------------------------------------------
 ; set_bank: bank register = bank, bk = bank lo EOR bank hi EOR key.
 set_bank:
@@ -383,34 +471,59 @@ write_bank:
         sta     (ptr),y
         rts
 
+; check_bank: the bank register reads back bank.  Clobbers A, X, Y.
+check_bank:
+        lda     ptr+1
+        sta     epage
+        ldy     #BANK_L
+        lda     (ptr),y
+        cmp     bank
+        bne     @err_l
+        ldy     #BANK_H
+        lda     (ptr),y
+        cmp     bank+1
+        beq     @ok
+        sta     got
+        lda     bank+1
+        jmp     @rep
+@err_l:
+        sta     got
+        lda     bank
+@rep:
+        sta     expect
+        sty     offs
+        jmp     report
+@ok:
+        rts
+
 ; fill_bank: write the pattern of the current bank.
 fill_bank:
         jsr     set_bank
-        ldy     #RAM_SIZE - 1
+        ldy     top
 @byte:
         tya
         eor     bk
-        sta     (ptr),y
+        sta     (dptr),y
         dey
         cpy     #2
         bcs     @byte
         lda     bank+1
         eor     key
-        sta     (ptr),y                 ; y = 1
+        sta     (dptr),y                ; y = 1
         dey
         lda     bank
         eor     key
-        sta     (ptr),y                 ; y = 0
+        sta     (dptr),y                ; y = 0
         rts
 
 ; verify_bank: check the pattern of the current bank.
 verify_bank:
         jsr     set_bank
-        ldy     #RAM_SIZE - 1
+        ldy     top
 @byte:
         tya
         eor     bk
-        cmp     (ptr),y
+        cmp     (dptr),y
         beq     @next
         jsr     vb_report
 @next:
@@ -419,14 +532,14 @@ verify_bank:
         bcs     @byte
         lda     bank+1                  ; y = 1
         eor     key
-        cmp     (ptr),y
+        cmp     (dptr),y
         beq     @byte0
         jsr     vb_report
 @byte0:
         ldy     #0
         lda     bank
         eor     key
-        cmp     (ptr),y
+        cmp     (dptr),y
         beq     @done
         jsr     vb_report
 @done:
@@ -435,7 +548,7 @@ verify_bank:
 ; vb_report: A = expected, Y = offset; keeps Y.
 vb_report:
         sta     expect
-        lda     (ptr),y
+        lda     (dptr),y
         sta     got
         sty     offs
         jsr     report
@@ -498,9 +611,28 @@ deselect:
         sta     (ptr),y
         rts
 
+; deselect_all: whichever page holds the latch.  With the registers in
+; $D5xx the $D1FF write is ignored (or lands in RAM with D1FF_RAM).
+deselect_all:
+        lda     #0
+        sta     $D1FF
+        sta     $D5FF
+        rts
+
 ; ---------------------------------------------------------------------------
 ; Error bookkeeping.
 ; ---------------------------------------------------------------------------
+; test_reg / test_ram: test_begin, errors reported on the register / RAM page.
+test_reg:
+        lda     ptr+1
+        sta     epage
+        jmp     test_begin
+
+test_ram:
+        lda     dptr+1
+        sta     epage
+        ; fall through
+
 test_begin:
         ldx     #2
 @copy:
@@ -544,8 +676,9 @@ test_end:
         lda     #ATEOL
         jmp     putc
 
-; report: one error at bank / offs, expected / got.  Counts it and prints
-; the first MAX_REPORT of the test.  Keeps bank, offs; clobbers A, X, Y.
+; report: one error at epage / bank / offs, expected / got.  Counts it and
+; prints the first MAX_REPORT of the test.  Keeps bank, offs; clobbers A,
+; X, Y.
 report:
         inc     errs
         bne     @counted
@@ -563,7 +696,7 @@ report:
 @line:
         inc     reported
         PRINT   s_err
-        lda     ptr+1
+        lda     epage
         jsr     phex
         PRINT   s_b
         lda     bank+1
@@ -587,13 +720,6 @@ report:
 ; ---------------------------------------------------------------------------
 ; Screen output through CIO, IOCB 0 (E:).
 ; ---------------------------------------------------------------------------
-; print_win: "D1 " / "D5 "
-print_win:
-        lda     ptr+1
-        jsr     phex
-        lda     #' '
-        jmp     putc
-
 ; print: zero-terminated string at A (low) / X (high).
 print:
         sta     sptr
@@ -641,15 +767,24 @@ putc:
 ; ---------------------------------------------------------------------------
         .segment "RODATA"
 
-s_title:   .byte ATCLR, "BANKED RAM TEST", ATEOL
-           .byte "RAM $xx00-$xx7F, COUNT $xxFB", ATEOL
-           .byte "BANK $xxFD, SELECT $xxFF", ATEOL, ATEOL, 0
-s_count:   .byte "COUNT    $", 0
-s_bankreg: .byte "BANK REG ", 0
-s_protect: .byte "PROTECT  ", 0
-s_march:   .byte "MARCH    ", 0
-s_limit:   .byte "LIMIT    ", 0
-s_keep:    .byte "D1 KEEP     ", 0
+s_title:   .byte ATCLR, "BANKED RAM TEST (GEORAM STYLE)", ATEOL
+           .byte "COUNT $xxFB BANK $xxFD LATCH $xxFF", ATEOL, 0
+s_sel:     .byte ATEOL, "SELECT $", 0
+s_selram:  .byte "FF, RAM $", 0
+s_selto:   .byte "00-$", 0
+s_count:   .byte " COUNT    $", 0
+s_bankreg: .byte " BANK REG ", 0
+s_excl:    .byte " EXCL     ", 0
+s_protect: .byte " PROTECT  ", 0
+s_shared:  .byte " SHARED   ", 0
+s_march:   .byte " MARCH    ", 0
+s_limit:   .byte " LIMIT    ", 0
+s_d1ff:    .byte ATEOL
+.if D1FF_RAM
+           .byte "D1FF RAM ", 0
+.else
+           .byte "D1FF PROTECTED ", 0
+.endif
 s_ok:      .byte "OK", ATEOL, 0
 s_failn:   .byte "FAIL $", 0
 s_err:     .byte "ERR ", 0

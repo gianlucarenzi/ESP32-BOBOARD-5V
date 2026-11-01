@@ -1,6 +1,6 @@
 # 6502 Monitor — ESP32 Pin Mapping (NodeMCU DevKit V1)
 
-Banked RAM PBI / CCTL peripheral: 20 bus signals, all through the TXS0108E
+Banked RAM PBI / CCTL peripheral (GeoRAM style): 20 bus signals, all through the TXS0108E
 level translators.
 
 ## 1. Data Bus (Bidirectional)
@@ -16,10 +16,13 @@ level translators.
 | **D7** | GPIO 19 | D19 |
 
 D0-D7 are inputs; the firmware drives them only while answering a read of a
-selected window (RAM, bank count or bank register).
+read of the RAM page or of a register (bank count, bank register).
 
-Window map: RAM `$xx00-$xx7F`, bank count `$xxFB-$xxFC` (R, 16 bit), bank
-register `$xxFD-$xxFE` (R/W, 16 bit), select latch `$xxFF` (W, bit 7).
+GeoRAM style, one latch at a time: `$80` to `$D1FF` puts the registers in
+`$D1xx` and the RAM in `$D500-$D5FF`; `$80` to `$D5FF` puts the registers in
+`$D5xx` and the RAM in `$D100-$D1FE` (`$D1FF` protected).  Register page:
+count `$xxFB-$xxFC` (R, 16 bit), bank `$xxFD-$xxFE` (R/W, 16 bit), latch
+`$xxFF` (W, bit 7).
 
 ## 2. Address Bus (A0-A7)
 | 6502 Signal | ESP32 GPIO | Board Label | Note |
@@ -38,8 +41,8 @@ register `$xxFD-$xxFE` (R/W, 16 bit), select latch `$xxFF` (W, bit 7).
 | :--- | :--- | :--- | :--- | :--- |
 | **PHI2**    | GPIO 2  | D2  | IN | 6502 System Clock (1.79 MHz) |
 | **R/W**     | GPIO 15 | D15 | IN | Read/Write |
-| **~D1XX**   | GPIO 22 | D22 | IN | $D100–$D1FF window, from the Atari MMU / PLA (Active Low, not PHI2-qualified) |
-| **~CCTL**   | GPIO 23 | D23 | IN | $D500–$D5FF window, from the Atari MMU / PLA (Active Low) |
+| **~D1XX**   | GPIO 22 | D22 | IN | $D100–$D1FF page, from the Atari MMU / PLA (Active Low, not PHI2-qualified) |
+| **~CCTL**   | GPIO 23 | D23 | IN | $D500–$D5FF page, from the Atari MMU / PLA (Active Low) |
 
 ## 4. Serial Debug
 | Signal | ESP32 GPIO | Board Label | Description |
