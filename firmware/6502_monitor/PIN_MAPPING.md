@@ -40,7 +40,7 @@
 ## 4. Serial Debug
 | Signal | ESP32 GPIO | Board Label | Description |
 | :--- | :--- | :--- | :--- |
-| **TX** | GPIO 1 | TX0 | Console output (115200 bps) |
+| **TX** | GPIO 1 | TX0 | Console output (115200 bps, `LOG_BAUD`) |
 
 ---
 

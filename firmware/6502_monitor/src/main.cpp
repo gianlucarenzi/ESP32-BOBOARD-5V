@@ -35,6 +35,8 @@
 #include <hal/cpu_ll.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -151,7 +153,6 @@ static DRAM_ATTR uint32_t log_head    = 0;  // written by the bus loop only
 static DRAM_ATTR uint32_t log_tail    = 0;  // written by LogTask only
 static DRAM_ATTR uint32_t log_dropped = 0;  // written by the bus loop only
 
-static volatile bool log_ready = false;     // Serial started by LogTask
 
 // ---------------------------------------------------------------------------
 // PBI ROM & Decode Tables
@@ -556,9 +557,48 @@ static const char *vera_reg_name(uint8_t offset, uint8_t dcsel)
 }
 
 // ============================================================================
-// LogTask -- Core 0: owns Serial (its UART interrupt is allocated on the core
-// that calls Serial.begin) and drains log_ring filled by the bus loop.
+// LogTask -- Core 0: the only writer on Serial.
+//
+// Nothing else calls Serial after boot: setup() configures the board
+// silently and LogTask prints the banner, the bus events and the errors in
+// one sequence.  Each line is formatted into a local buffer and sent with a
+// single Serial.write(): uartWriteBuf() holds the UART mutex for the whole
+// call, so even an unexpected writer could not split a line.  (Print::printf
+// would also be one write, but it mallocs every line longer than 64 bytes;
+// Print::println is two writes.)
+//
+// TX path (arduino-esp32 2.0.x): no TX ring buffer (setTxBufferSize 0), so
+// the write copies into the 128-byte hardware FIFO and blocks LogTask until
+// the last byte is in the FIFO.  The blocking happens on Core 0 only; the
+// bus loop just keeps filling log_ring and counts what does not fit.
 // ============================================================================
+#ifndef LOG_BAUD
+#define LOG_BAUD 115200u
+#endif
+
+#define LOG_LINE_MAX 128u
+
+static volatile bool bus_start_failed = false;   // set by setup()
+
+static void log_line(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void log_line(const char *fmt, ...)
+{
+    char    buf[LOG_LINE_MAX];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n < 0)
+        return;
+    if ((size_t)n >= sizeof(buf))
+    {
+        // Truncated: keep the line terminated.
+        n = sizeof(buf) - 1;
+        buf[n - 1] = '\n';
+    }
+    Serial.write((const uint8_t *)buf, (size_t)n);
+}
+
 static void log_drain(void)
 {
     // Shadow of VERA_CTRL DCSEL bits [2:1]; updated on every write to $D105.
@@ -577,12 +617,12 @@ static void log_drain(void)
         if (evt.type == EVT_LATCH)
         {
             bool enabled = (evt.flags & 0x02) != 0;
-            Serial.printf("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to %s) MPD=%s EXTSEL=%s\n",
-                          sec, us,
-                          enabled ? "ENABLED " : "DISABLED", evt.data,
-                          (BUS_MODE == BUS_MODE_PBI) ? "$D1FF" : "$D5FF",
-                          (evt.flags & 0x04) ? "LO" : "HI",
-                          (evt.flags & 0x08) ? "LO" : "HI");
+            log_line("[%5lu.%06lu] [VCS ] Latch %s ($%02X written to %s) MPD=%s EXTSEL=%s\n",
+                     (unsigned long)sec, (unsigned long)us,
+                     enabled ? "ENABLED " : "DISABLED", evt.data,
+                     (BUS_MODE == BUS_MODE_PBI) ? "$D1FF" : "$D5FF",
+                     (evt.flags & 0x04) ? "LO" : "HI",
+                     (evt.flags & 0x08) ? "LO" : "HI");
         }
         else  // EVT_REG
         {
@@ -590,50 +630,56 @@ static void log_drain(void)
             if (evt.offset == 0x05 && (evt.flags & 0x01))
                 dcsel = (evt.data >> 1) & 0x07;
 
-            Serial.printf("[%5lu.%06lu] [D1%02X - %-20s] %c $%02X  MPD=%s EXTSEL=%s\n",
-                          sec, us,
-                          evt.offset,
-                          vera_reg_name(evt.offset, dcsel),
-                          (evt.flags & 0x01) ? 'W' : 'R',
-                          evt.data,
-                          (evt.flags & 0x04) ? "LO" : "HI",
-                          (evt.flags & 0x08) ? "LO" : "HI");
+            log_line("[%5lu.%06lu] [D1%02X - %-20s] %c $%02X  MPD=%s EXTSEL=%s\n",
+                     (unsigned long)sec, (unsigned long)us,
+                     evt.offset,
+                     vera_reg_name(evt.offset, dcsel),
+                     (evt.flags & 0x01) ? 'W' : 'R',
+                     evt.data,
+                     (evt.flags & 0x04) ? "LO" : "HI",
+                     (evt.flags & 0x08) ? "LO" : "HI");
         }
     }
 
     const uint32_t dropped = log_dropped;
     if (dropped != dropped_seen)
     {
-        Serial.printf("[6502_monitor] log: %lu events dropped (ring full)\n",
-                      (unsigned long)(dropped - dropped_seen));
+        log_line("[6502_monitor] log: %lu events dropped (ring full)\n",
+                 (unsigned long)(dropped - dropped_seen));
         dropped_seen = dropped;
     }
 }
 
 static void LogTask(void *arg)
 {
-    Serial.begin(115200, SERIAL_8N1, -1, PIN_UART_TX);
-    log_ready = true;
+    Serial.begin(LOG_BAUD, SERIAL_8N1, -1, PIN_UART_TX);
+
+    log_line("\n[6502_monitor] PBI ROM Emulator (%s mode, latch %s)\n",
+             (BUS_MODE == BUS_MODE_PBI) ? "PBI" : "CCTL",
+             (BUS_MODE == BUS_MODE_PBI) ? "$D1FF" : "$D5FF");
+    log_line("[6502_monitor] Bus loop on Core 1 (write sample %u ns), log %u baud\n",
+             (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
+    log_line("[6502_monitor] VCS=OFF  Latch=DISABLED\n");
+
+    bool fail_seen = false;
     for (;;)
     {
         log_drain();
+        if (bus_start_failed && !fail_seen)
+        {
+            log_line("[6502_monitor] FATAL: cannot start the bus loop\n");
+            fail_seen = true;
+        }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 // ============================================================================
 // Setup -- runs on Core 1 (ARDUINO_RUNNING_CORE) until MonitorTask takes the
-// core over.
+// core over.  It never touches Serial (see LogTask).
 // ============================================================================
 void setup()
 {
-    // Serial and the log printer live on Core 0.
-    xTaskCreatePinnedToCore(LogTask, "BusLog", 4096, NULL, 1, NULL, 0);
-    while (!log_ready)
-        delay(1);
-
-    Serial.println("\n[6502_monitor] PBI ROM Emulator booting...");
-
     // Load PBI driver ROM image (generated from 6502/pbi-driver.bin via pre_build.py)
     static_assert(sizeof(pbi_driver) >= sizeof(pbi_rom), "PBI ROM image must be 2 KB");
     memcpy(pbi_rom, pbi_driver, sizeof(pbi_rom));
@@ -665,16 +711,15 @@ void setup()
     pinMode(PIN_A9,  INPUT);
     pinMode(PIN_A10, INPUT);
 
-    Serial.printf("[6502_monitor] Bus loop on Core 1 (write sample %u ns)\n",
-                  BUS_WR_SAMPLE_NS);
-    Serial.println("[6502_monitor] VCS=OFF  Latch=DISABLED");
-    Serial.flush();
+    // Serial and the log printer live on Core 0: banner first, then the
+    // bus events, all from the same task.
+    xTaskCreatePinnedToCore(LogTask, "BusLog", 4096, NULL, 1, NULL, 0);
 
-    // MonitorTask takes Core 1 over (highest priority, never yields): this
-    // call does not return.
-    xTaskCreatePinnedToCore(MonitorTask, "Monitor", 4096, NULL,
-                            configMAX_PRIORITIES - 1, NULL, 1);
-    Serial.println("[6502_monitor] FATAL: cannot start the bus loop");
+    // MonitorTask takes Core 1 over (highest priority, never yields): on
+    // success this call does not return.
+    if (xTaskCreatePinnedToCore(MonitorTask, "Monitor", 4096, NULL,
+                                configMAX_PRIORITIES - 1, NULL, 1) != pdPASS)
+        bus_start_failed = true;
 }
 
 void loop()
