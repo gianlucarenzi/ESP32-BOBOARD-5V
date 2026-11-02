@@ -13,3 +13,5 @@
 /firmware/6502_monitor/6502/pbi-driver.map
 # created by kicad-cli (KiCad 7+) when exporting the 3D models
 *.kicad_prl
+# Python bytecode
+__pycache__/
