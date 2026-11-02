@@ -26,8 +26,8 @@ translators to J3 (5 V side).
 | A7 | 27 | D27 | 15 | IN | |
 | PHI2 | 2 | D2 | 1 | IN | 6502 clock |
 | R/W | 15 | D15 | 7 | IN | high = read |
-| `~D1XX` | 22 | D22 | 11 | IN | **sid-pbi**: $D100-$D1FF page (Atari MMU, active low) |
-| `~CCTL` | 23 | D23 | 12 | IN | **sid-cctl / sid-demo-cctl**: $D500-$D5FF page (cartridge slot pin 15, active low) |
+| `~D1XX` | 22 | D22 | 11 | IN | **sid-atari-pbi**: $D100-$D1FF page (Atari MMU, active low) |
+| `~CCTL` | 23 | D23 | 12 | IN | **sid-atari-cctl**: $D500-$D5FF page (cartridge slot pin 15, active low) |
 
 ## Commodore 64 Expansion Port (sid-c64-io1 / sid-c64-io2)
 
@@ -64,10 +64,10 @@ connect J3 26 (EN) and 27-28 (+3V3) to the computer.
 ## Address Decode
 
 ```
-sid-cctl:  ~CCTL low  -> $D500 + A0-A7
+sid-atari-cctl:  ~CCTL low  -> $D500 + A0-A7
              $00-$1E  SID registers (always on)
              $1F-$FF  not decoded
-sid-pbi:   ~D1XX low  -> $D100 + A0-A7
+sid-atari-pbi:   ~D1XX low  -> $D100 + A0-A7
              $00-$1E  SID registers, while selected
              $FF      PBI select latch (W): bit 7 = 1 select, 0 deselect; never driven
              $1F-$FE  not decoded

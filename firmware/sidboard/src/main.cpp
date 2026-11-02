@@ -4,10 +4,10 @@
  * FIRMWARE: NodeMCU-32S (ESP32-WROOM, Xtensa LX6).
  *
  * Atari builds (PlatformIO environments), same board and wiring:
- * - sid-cctl (SID_MODE_PBI = 0): the SID sits in the cartridge control area,
+ * - sid-atari-cctl (SID_MODE_PBI = 0): the SID sits in the cartridge control area,
  *   always on, no latch, no configuration:
  *     $D500-$D51E  SID registers (~CCTL, J3 pin 12)
- * - sid-pbi (SID_MODE_PBI = 1): the SID is a PBI device, ID $80:
+ * - sid-atari-pbi (SID_MODE_PBI = 1): the SID is a PBI device, ID $80:
  *     $D100-$D11E  SID registers, while selected (~D1XX, J3 pin 11)
  *     $D1FF        PBI select latch (W): bit 7 = 1 selects, 0 deselects;
  *                  never driven ($D1FF is the PBI interrupt status)
@@ -17,6 +17,12 @@
  * Only A0-A7 are sampled: the page comes from the select line.  Offsets
  * $1F-$FE of the page are not decoded (never driven, writes ignored).
  * Reads of $00-$1E return the stored register byte.
+ *
+ * Demo build (AUDIO_DEMO, env sid-demo): the built-in tune plays on DAC1 and
+ * the bus loop is not started: every bus pin stays an input, nothing is ever
+ * driven, so the board can sit on an Atari (sound mixed with POKEY through
+ * the audio input) or a C64 (DAC1 to an external amplifier), or on no
+ * computer at all.
  *
  * Commodore 64 builds (SID_BUS_C64 = 1), a second SID on the expansion port,
  * always on, block chosen at build time with SID_C64_IO:
@@ -200,7 +206,7 @@ static void demo_tick(void *)
 // ---------------------------------------------------------------------------
 #define LOG_RING_SIZE 1024u
 
-#define EVT_LATCH 0   // $D1FF select change (sid-pbi)
+#define EVT_LATCH 0   // $D1FF select change (sid-atari-pbi)
 #define EVT_REG   1   // access to the SID page
 
 #define FL_WRITE  0x01u
@@ -732,7 +738,9 @@ static void log_drain(void)
 static void LogTask(void *arg)
 {
     Serial.begin(LOG_BAUD, SERIAL_8N1, -1, PIN_UART_TX);
-#if SID_BUS_C64
+#ifdef AUDIO_DEMO
+    log_line("\n[sidboard] DEMO: no bus loop, the bus is never driven\n");
+#elif SID_BUS_C64
     log_line("\n[sidboard] C64 SID, always on: $%02X00-$%02X1E (/IO%u, J3 pin %u)\n",
              SID_PAGE, SID_PAGE, (unsigned)SID_C64_IO, SID_C64_IO == 1 ? 12u : 11u);
 #elif SID_MODE_PBI
@@ -746,7 +754,8 @@ static void LogTask(void *arg)
 #ifdef AUDIO_DEMO
     log_line("[sidboard] AUDIO_DEMO: Commando, %d frames @ 50 Hz (looping)\n", demo_total);
 #endif
-#if SID_BUS_C64
+#ifdef AUDIO_DEMO
+#elif SID_BUS_C64
     log_line("[sidboard] Bus loop on Core 1 (select qualify %u ns, write sample %u ns), log %u baud\n",
              (unsigned)IO_QUALIFY_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
 #else
@@ -809,6 +818,11 @@ void setup()
     xTaskCreatePinnedToCore(LogTask, "SidLog", 4096, NULL, 1, NULL, 0);
     xTaskCreatePinnedToCore(SidTask, "SidSynth", 4096, NULL, 5, NULL, 0);
 
+#ifdef AUDIO_DEMO
+    // Demo: no bus loop, every bus pin stays an input.
+    (void)MonitorTask;
+    return;
+#endif
     // MonitorTask takes Core 1 over: on success this call does not return.
     if (xTaskCreatePinnedToCore(MonitorTask, "Monitor", 4096, NULL,
                                 configMAX_PRIORITIES - 1, NULL, 1) != pdPASS)
@@ -817,6 +831,6 @@ void setup()
 
 void loop()
 {
-    // Not reached: MonitorTask owns Core 1.
+    // Not reached: MonitorTask owns Core 1 (sid-demo: idle).
     vTaskDelay(portMAX_DELAY);
 }

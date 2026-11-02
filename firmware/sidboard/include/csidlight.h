@@ -58,8 +58,8 @@
 /**
  * cSIDLight - Lightweight SID 6581/8580 emulator.
  *
- * Registers 0x00-0x1E mapped at $D500-$D51E (env sid-cctl, ~CCTL) or
- * $D100-$D11E (env sid-pbi, ~D1XX, selected through $D1FF).
+ * Registers 0x00-0x1E mapped at $D500-$D51E (env sid-atari-cctl, ~CCTL) or
+ * $D100-$D11E (env sid-atari-pbi, ~D1XX, selected through $D1FF).
  * Audio output via ESP32 DAC1 on GPIO 25 at 22050 Hz.
  *
  * Bus-timing safety:

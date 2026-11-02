@@ -18,27 +18,25 @@ Firmware for the **ESP32-BOBOARD-5V** (NodeMCU-32S) on the Atari 8-bit bus:
 
 | Environment | SID registers | Select | Wiring |
 |---|---|---|---|
-| `sid-cctl` | `$D500-$D51E` | always on, no latch, no configuration | Atari `~CCTL` → J3 pin 12 |
-| `sid-pbi` | `$D100-$D11E` | PBI device ID `$80`: write `$80` to `$D1FF` to select, `$00` to deselect | `~D1XX` → J3 pin 11 |
+| `sid-atari-cctl` | `$D500-$D51E` | always on, no latch, no configuration | Atari `~CCTL` → J3 pin 12 |
+| `sid-atari-pbi` | `$D100-$D11E` | PBI device ID `$80`: write `$80` to `$D1FF` to select, `$00` to deselect | `~D1XX` → J3 pin 11 |
 | `sid-c64-io1` | `$DE00-$DE1E` | C64, always on (`SID_C64_IO=1`) | C64 `/IO1` (port pin 7) → J3 pin 12 |
 | `sid-c64-io2` | `$DF00-$DF1E` | C64, always on (`SID_C64_IO=2`) | C64 `/IO2` (port pin 10) → J3 pin 11 |
-| `sid-demo-cctl` | as `sid-cctl` | plus the built-in tune | as `sid-cctl` |
-| `sid-demo-pbi` | as `sid-pbi` | plus the built-in tune | as `sid-pbi` |
-| `sid-c64-demo-io1` | as `sid-c64-io1` | plus the built-in tune | as `sid-c64-io1` |
-| `sid-c64-demo-io2` | as `sid-c64-io2` | plus the built-in tune | as `sid-c64-io2` |
+| `sid-demo` | none | built-in tune (`AUDIO_DEMO`), no bus loop | Atari or C64, or nothing |
 
-**Demo builds** (`AUDIO_DEMO`): the Commando tune (`examples/Commando_dmp.h`)
-loops at 50 Hz, written straight into the registers, so it plays with no
-computer attached; the bus works as in the base build (in `sid-demo-pbi`
-the tune plays even while the SID is deselected).  Every frame rewrites
-registers `$00-$18`: a program writing the SID at the same time is
-overwritten within 20 ms.
+**`sid-demo`:** the Commando tune (`examples/Commando_dmp.h`) loops at
+50 Hz on DAC1 with no driver on the computer: the bus loop is not started,
+every bus pin stays an input and nothing is ever driven, so the same build
+works anywhere.  On the Atari, plugged in and powered on, the sound comes
+out mixed with POKEY through the audio input (ECI AUDIO IN, see Audio
+Circuit); on the C64 the expansion port has no audio input, so DAC1 must be
+wired to an external amplifier or mixer to be heard.
 
 Only A0-A7 are sampled: the page comes from the select line.  Offsets
 `$1F-$FE` of the page are not decoded (never driven, writes ignored).
 Reads of `$00-$1E` return the stored register byte.
 
-**`sid-pbi`:** `$D1FF` is never driven (it is the PBI interrupt status read
+**`sid-atari-pbi`:** `$D1FF` is never driven (it is the PBI interrupt status read
 by the OS).  Deselected, the SID neither answers nor stores writes, but it
 **keeps playing**: deselecting only removes it from the bus.  The OS PBI
 scan at power-up and RESET writes `$80` then `$00` to `$D1FF`, so the SID
@@ -46,9 +44,9 @@ ends deselected with its registers unchanged.  There is no PBI ROM (the
 board has no MPD / EXTSEL), so the OS does not install a handler: programs
 access the registers directly.
 
-**`sid-cctl`:** `$D5xx` belongs to the SID: cartridges that bank-switch
+**`sid-atari-cctl`:** `$D5xx` belongs to the SID: cartridges that bank-switch
 through CCTL (XEGS, AtariMax, SpartaDOS X, ...) cannot be used with it; use
-`sid-pbi` then.
+`sid-atari-pbi` then.
 
 **C64 (`sid-c64-io1` / `sid-c64-io2`):** the block is chosen at build time
 with `-D SID_C64_IO=1` or `2` (`SID_BUS_C64=1`); only that select line needs
@@ -75,8 +73,8 @@ infographics in [`../6502_monitor/docs/`](../6502_monitor/docs/wiring_atari.svg)
 | D0-D7 | 4, 5, 13, 14, 16, 17, 18, 19 | 2, 3, 5, 6, 22, 23, 8, 9 |
 | A0-A7 | 34, 35, 36, 39, 32, 33, 21, 27 | 18, 19, 20, 21, 16, 17, 10, 15 |
 | PHI2 / R/W | 2 / 15 | 1 / 7 |
-| `~D1XX` (sid-pbi) | 22 | 11 |
-| `~CCTL` (sid-cctl) | 23 | 12 |
+| `~D1XX` (sid-atari-pbi) | 22 | 11 |
+| `~CCTL` (sid-atari-cctl) | 23 | 12 |
 | C64 `/IO2` (sid-c64-io2) | 22 | 11 |
 | C64 `/IO1` (sid-c64-io1) | 23 | 12 |
 | DAC1 audio | 25 | (module pin) |
@@ -90,7 +88,7 @@ infographics in [`../6502_monitor/docs/`](../6502_monitor/docs/wiring_atari.svg)
 
 ## SID Register Map
 
-Base `$D500` (sid-cctl), `$D100` (sid-pbi), `$DE00` (sid-c64-io1) or
+Base `$D500` (sid-atari-cctl), `$D100` (sid-atari-pbi), `$DE00` (sid-c64-io1) or
 `$DF00` (sid-c64-io2).
 
 | Offset | Register | Emulated |
@@ -107,7 +105,7 @@ Base `$D500` (sid-cctl), `$D100` (sid-pbi), `$DE00` (sid-c64-io1) or
 | `$19/$1A` | POTX / POTY | no (read back the stored byte) |
 | `$1B/$1C` | OSC3 / ENV3 | no (read back the stored byte) |
 | `$1D/$1E` | unused | stored |
-| `$FF` | `PBI_SELECT` (sid-pbi only) | latch, bit 7 |
+| `$FF` | `PBI_SELECT` (sid-atari-pbi only) | latch, bit 7 |
 
 ---
 
@@ -246,12 +244,11 @@ range of the square-wave voices.
 ## Build and Flash
 
 ```bash
-pio run -e sid-cctl -t upload     # SID at $D500
-pio run -e sid-pbi  -t upload     # SID at $D100, PBI device
+pio run -e sid-atari-cctl -t upload     # SID at $D500
+pio run -e sid-atari-pbi  -t upload     # SID at $D100, PBI device
 pio run -e sid-c64-io1 -t upload  # C64: SID at $DE00 (/IO1)
 pio run -e sid-c64-io2 -t upload  # C64: SID at $DF00 (/IO2)
-pio run -e sid-demo-cctl -t upload     # built-in tune, also with no computer
-                                       # (sid-demo-pbi, sid-c64-demo-io1, sid-c64-demo-io2)
+pio run -e sid-demo -t upload     # built-in tune, any computer or none
 pio device monitor
 ```
 
@@ -271,7 +268,7 @@ monitor does not toggle RTS / DTR.  Bus timing can be tuned with
 
 ## Usage from the Atari
 
-### sid-cctl (Atari BASIC)
+### sid-atari-cctl (Atari BASIC)
 
 ```basic
 10 POKE 54528,100   : REM $D500 V1 FREQ LO
@@ -281,7 +278,7 @@ monitor does not toggle RTS / DTR.  Bus timing can be tuned with
 50 X=PEEK(54532)    : REM read back V1 CTRL
 ```
 
-### sid-pbi (Atari BASIC)
+### sid-atari-pbi (Atari BASIC)
 
 ```basic
 10 POKE 53759,128   : REM $D1FF: select the SID (PBI ID $80)
@@ -295,8 +292,8 @@ monitor does not toggle RTS / DTR.  Bus timing can be tuned with
 ### cc65
 
 ```c
-#define SID ((volatile unsigned char *)0xD500)   /* 0xD100 for sid-pbi */
-/* sid-pbi only: */ *(volatile unsigned char *)0xD1FF = 0x80;
+#define SID ((volatile unsigned char *)0xD500)   /* 0xD100 for sid-atari-pbi */
+/* sid-atari-pbi only: */ *(volatile unsigned char *)0xD1FF = 0x80;
 SID[0x00] = 0x3C;  SID[0x01] = 0x0A;   /* V1 frequency */
 SID[0x18] = 0x0F;                      /* volume */
 SID[0x04] = 0x11;                      /* GATE + SQR */
@@ -321,12 +318,12 @@ frame per PAL VBlank.  `examples/mkdump.py` turns `Commando_dmp.h` into
 
 | Player | Build / use | Notes |
 |---|---|---|
-| `cc65/sid_dump_player.xex` | `make` in `examples/cc65` | sid-cctl, SID at `$D500` |
-| `cc65/sid_dump_player_pbi.xex` | same | sid-pbi: `$80` to `$D1FF`, SID at `$D100`, `$00` at the end |
+| `cc65/sid_dump_player.xex` | `make` in `examples/cc65` | sid-atari-cctl, SID at `$D500` |
+| `cc65/sid_dump_player_pbi.xex` | same | sid-atari-pbi: `$80` to `$D1FF`, SID at `$D100`, `$00` at the end |
 | `atari-basic/sid_dump_player.bas` | `PBI=0` / `PBI=1` in line 50 | a 23-byte USR routine copies each frame (BASIC alone is too slow for 50 Hz); loading 27500 bytes with `GET` takes about a minute |
 
 Both read `D:SIDDUMP.BIN` into RAM, write one frame per VBlank, stop on
-any key, then gate the voices off, set the volume to 0 and (sid-pbi)
+any key, then gate the voices off, set the volume to 0 and (sid-atari-pbi)
 deselect.  `python3 test_players.py` (in `examples/`, needs py65) runs
 both cc65 players on a fake Atari (CIO with E: and the dump file, RTCLOK,
 the sidboard model) and the BASIC USR routine: all 1100 frames written,
@@ -343,7 +340,7 @@ were rewritten for direct register access.
 
 ```
 sidboard/
-├── platformio.ini       sid-cctl, sid-pbi, sid-c64-io1, sid-c64-io2 and their demo builds
+├── platformio.ini       sid-atari-cctl, sid-atari-pbi, sid-c64-io1, sid-c64-io2, sid-demo
 ├── efuse_vdd_sdio.py    VDD_SDIO efuse check before upload (from 6502_monitor)
 ├── PIN_MAPPING.md       pins and register map
 ├── Logs.md              decisions and change log

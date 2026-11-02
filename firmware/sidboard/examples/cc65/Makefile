@@ -1,6 +1,6 @@
 # SID dump player (cc65): one executable per sidboard build.
-#   make   sid_dump_player.xex (sid-cctl, $D500) and
-#          sid_dump_player_pbi.xex (sid-pbi, $D100 + select $D1FF),
+#   make   sid_dump_player.xex (sid-atari-cctl, $D500) and
+#          sid_dump_player_pbi.xex (sid-atari-pbi, $D100 + select $D1FF),
 #          ../SIDDUMP.BIN from ../Commando_dmp.h
 
 all: sid_dump_player.xex sid_dump_player_pbi.xex ../SIDDUMP.BIN

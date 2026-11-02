@@ -2,8 +2,8 @@
 
 cc65 player: a minimal Atari around the 6502 (RAM, CIOV trapped by a fake
 CIO with E: and D:SIDDUMP.BIN, RTCLOK advanced every "frame", CH = no key)
-and a model of the sidboard firmware (sid-cctl: $D500-$D51E always on;
-sid-pbi: $D100-$D11E while $D1FF bit 7 is set).  Every register write is
+and a model of the sidboard firmware (sid-atari-cctl: $D500-$D51E always on;
+sid-atari-pbi: $D100-$D11E while $D1FF bit 7 is set).  Every register write is
 recorded with the frame it falls in, then compared with the dump.
 
 BASIC player: its machine-language routine (the DATA bytes) is run alone
@@ -167,7 +167,7 @@ def run_cc65(path, pbi):
 
 
 for path, pbi in (("cc65/sid_dump_player.xex", False), ("cc65/sid_dump_player_pbi.xex", True)):
-    print("--- %s (%s)" % (path, "sid-pbi" if pbi else "sid-cctl"))
+    print("--- %s (%s)" % (path, "sid-atari-pbi" if pbi else "sid-atari-cctl"))
     sid, text, done = run_cc65(path, pbi)
     print("    " + text.strip().replace("\n", "\n    "))
     check(done, "program returned to DOS")

@@ -6,11 +6,11 @@
  * PAL VBlank (50 Hz).  Each frame is written straight into the SID
  * registers, then the player waits for the next VBlank (RTCLOK).
  *
- *   sid-cctl firmware: registers at $D500, always on      (SID_PBI = 0)
- *   sid-pbi  firmware: registers at $D100, select $D1FF   (SID_PBI = 1)
+ *   sid-atari-cctl firmware: registers at $D500, always on      (SID_PBI = 0)
+ *   sid-atari-pbi  firmware: registers at $D100, select $D1FF   (SID_PBI = 1)
  *
  * At the end (or on a key) the voices are gated off and the volume set to 0;
- * on sid-pbi the device is deselected.
+ * on sid-atari-pbi the device is deselected.
  *
  * Build: make (both variants).
  */

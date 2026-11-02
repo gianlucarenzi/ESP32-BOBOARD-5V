@@ -1,6 +1,12 @@
 # Project Logs & Architectural Decisions - SIDBOARD
 
 
+## 2026-11-02: Builds Renamed, One Demo for Every Computer
+
+- `sid-cctl` → **`sid-atari-cctl`**, `sid-pbi` → **`sid-atari-pbi`**.
+- The four demo builds are replaced by one **`sid-demo`**: the tune needs no driver on the computer, so the demo does not start the bus loop at all (every bus pin an input, nothing ever driven).  Plugged into an Atari and powered on, the sound comes out mixed with POKEY; on a C64, DAC1 goes to an external amplifier / mixer (no audio on the expansion port).
+- Five environments: `sid-atari-cctl`, `sid-atari-pbi`, `sid-c64-io1`, `sid-c64-io2`, `sid-demo`.
+
 ## 2026-11-02: Commodore 64 Builds, /IO1 or /IO2 Block
 
 - New environments **`sid-c64-io1`** (SID at `$DE00-$DE1E`, `/IO1` → J3 pin 12, GPIO23) and **`sid-c64-io2`** (`$DF00-$DF1E`, `/IO2` → J3 pin 11, GPIO22): `-D SID_BUS_C64=1 -D SID_C64_IO=1|2`, any other value stops the build.  Always on (no latch on the C64); only the chosen line is read, so the other block stays free for a REU / GeoRAM / EasyFlash.
