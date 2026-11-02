@@ -310,7 +310,20 @@ else
 fi
 
 echo "Creating VRML 3D object..."
-KISYS3DMOD=${KICAD5_3DMODELS} ${KICADCLI} pcb export vrml -o images/${PCBNAME}.wrl --force --no-dnp ${PCBNAME}.kicad_pcb
+# From the STEP with FreeCAD (GUI on a virtual display, the VRML export and
+# the colours need it): same models and colours as the STEP, placed like the
+# KiCad VRML. Without FreeCAD or Xvfb, the kicad-cli export as before
+if command -v freecad >/dev/null 2>&1 && command -v xvfb-run >/dev/null 2>&1 && [ -f images/${PCBNAME}.step ]; then
+	WRLLOG=$(mktemp)
+	STEP2WRL_IN="$(pwd)/images/${PCBNAME}.step" STEP2WRL_OUT="$(pwd)/images/${PCBNAME}.wrl" STEP2WRL_LOG="${WRLLOG}" \
+		xvfb-run -a -s "-screen 0 1280x1024x24" freecad "${LOCAL_UTILS_DIR}/step2wrl.py" >/dev/null 2>&1
+	WRLRC=$?
+	cat "${WRLLOG}"
+	rm -f "${WRLLOG}"
+	[ ${WRLRC} -eq 0 ] || { echo "Error on creating the VRML file."; exit 1; }
+else
+	KISYS3DMOD=${KICAD5_3DMODELS} ${KICADCLI} pcb export vrml -o images/${PCBNAME}.wrl --force --no-dnp ${PCBNAME}.kicad_pcb
+fi
 
 # Remove the existing
 rm ${PCBNAMEOUT}.zip 2>/dev/null
