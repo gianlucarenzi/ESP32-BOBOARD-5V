@@ -204,10 +204,26 @@ fi
 PCBVER=$1
 PCBNAMEOUT=${PCBNAMEOUT}-v${PCBVER}
 
-# La prima volta va generato il file xml!
-if [ ! -f ${PCBNAME}.xml ]; then
-	echo "Need to run once the BOM Generator from EESCHEMA / Schematic Designer"
-	exit 1
+# kicadcli: command line tool for the KiCad 5 schematic (eeschema 5 has no
+# CLI). A copy lives in utilities/: if it is not in the PATH, install it into
+# $HOME/bin and add $HOME/bin to the PATH
+if ! command -v kicadcli >/dev/null 2>&1; then
+	echo "kicadcli not found in the PATH: installing it into ${HOME}/bin"
+	mkdir -p "${HOME}/bin"
+	install -m 755 "${LOCAL_UTILS_DIR}/kicadcli" "${HOME}/bin/kicadcli" || { echo "ERROR: kicadcli install failed."; exit 1; }
+	case ":${PATH}:" in
+		*":${HOME}/bin:"*) ;;
+		*) export PATH="${HOME}/bin:${PATH}" ;;
+	esac
+fi
+
+# The XML netlist that eeschema writes with "Generate Bill of Materials",
+# now made by kicadcli from the schematic
+echo "Creating the XML netlist..."
+kicadcli sch export-xml ${PCBNAME}.sch -o ${PCBNAME}.xml || { echo "Error on creating the XML netlist."; exit 1; }
+# KiCad grouped BOM (bom2grouped_csv.xsl, same as the eeschema plugin)
+if command -v xsltproc >/dev/null 2>&1 && [ -f /usr/share/kicad/plugins/bom2grouped_csv.xsl ]; then
+	xsltproc -o ${PCBNAME} /usr/share/kicad/plugins/bom2grouped_csv.xsl ${PCBNAME}.xml
 fi
 
 # Creiamo la BOM per JLCPCB
