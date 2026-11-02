@@ -7,6 +7,7 @@
 - C64 bus loop from the 6502_monitor `c64` build: decode while PHI2 is high (the VIC-II owns PHI1), select polled for `IO_QUALIFY_NS` = 200 ns after the rise, read byte driven at once until PHI2 falls, write sampled `BUS_WR_SAMPLE_NS` = 300 ns after the rise.  The Atari builds are unchanged.
 - `/IO1` recommended: `/IO2` clashes with a REU, the most common C64 expansion today.
 - Built for all five environments; not yet tried on a C64.
+- `sid-demo` renamed **`sid-demo-cctl`**; new demo builds **`sid-demo-pbi`**, **`sid-c64-demo-io1`**, **`sid-c64-demo-io2`** (`extends` the base build plus `-D AUDIO_DEMO`).  Eight environments, all built.
 
 ## 2026-11-01: Bus Loop from 6502_monitor, CCTL and PBI Builds
 

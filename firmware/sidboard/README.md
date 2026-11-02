@@ -20,9 +20,19 @@ Firmware for the **ESP32-BOBOARD-5V** (NodeMCU-32S) on the Atari 8-bit bus:
 |---|---|---|---|
 | `sid-cctl` | `$D500-$D51E` | always on, no latch, no configuration | Atari `~CCTL` → J3 pin 12 |
 | `sid-pbi` | `$D100-$D11E` | PBI device ID `$80`: write `$80` to `$D1FF` to select, `$00` to deselect | `~D1XX` → J3 pin 11 |
-| `sid-demo` | as `sid-cctl` | plus a built-in tune (`AUDIO_DEMO`, Commando at 50 Hz) | as `sid-cctl` |
 | `sid-c64-io1` | `$DE00-$DE1E` | C64, always on (`SID_C64_IO=1`) | C64 `/IO1` (port pin 7) → J3 pin 12 |
 | `sid-c64-io2` | `$DF00-$DF1E` | C64, always on (`SID_C64_IO=2`) | C64 `/IO2` (port pin 10) → J3 pin 11 |
+| `sid-demo-cctl` | as `sid-cctl` | plus the built-in tune | as `sid-cctl` |
+| `sid-demo-pbi` | as `sid-pbi` | plus the built-in tune | as `sid-pbi` |
+| `sid-c64-demo-io1` | as `sid-c64-io1` | plus the built-in tune | as `sid-c64-io1` |
+| `sid-c64-demo-io2` | as `sid-c64-io2` | plus the built-in tune | as `sid-c64-io2` |
+
+**Demo builds** (`AUDIO_DEMO`): the Commando tune (`examples/Commando_dmp.h`)
+loops at 50 Hz, written straight into the registers, so it plays with no
+computer attached; the bus works as in the base build (in `sid-demo-pbi`
+the tune plays even while the SID is deselected).  Every frame rewrites
+registers `$00-$18`: a program writing the SID at the same time is
+overwritten within 20 ms.
 
 Only A0-A7 are sampled: the page comes from the select line.  Offsets
 `$1F-$FE` of the page are not decoded (never driven, writes ignored).
@@ -238,9 +248,10 @@ range of the square-wave voices.
 ```bash
 pio run -e sid-cctl -t upload     # SID at $D500
 pio run -e sid-pbi  -t upload     # SID at $D100, PBI device
-pio run -e sid-demo -t upload     # built-in tune, no Atari needed
 pio run -e sid-c64-io1 -t upload  # C64: SID at $DE00 (/IO1)
 pio run -e sid-c64-io2 -t upload  # C64: SID at $DF00 (/IO2)
+pio run -e sid-demo-cctl -t upload     # built-in tune, also with no computer
+                                       # (sid-demo-pbi, sid-c64-demo-io1, sid-c64-demo-io2)
 pio device monitor
 ```
 
@@ -332,7 +343,7 @@ were rewritten for direct register access.
 
 ```
 sidboard/
-├── platformio.ini       sid-cctl, sid-pbi, sid-demo, sid-c64-io1, sid-c64-io2
+├── platformio.ini       sid-cctl, sid-pbi, sid-c64-io1, sid-c64-io2 and their demo builds
 ├── efuse_vdd_sdio.py    VDD_SDIO efuse check before upload (from 6502_monitor)
 ├── PIN_MAPPING.md       pins and register map
 ├── Logs.md              decisions and change log

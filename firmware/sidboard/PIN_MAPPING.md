@@ -27,7 +27,7 @@ translators to J3 (5 V side).
 | PHI2 | 2 | D2 | 1 | IN | 6502 clock |
 | R/W | 15 | D15 | 7 | IN | high = read |
 | `~D1XX` | 22 | D22 | 11 | IN | **sid-pbi**: $D100-$D1FF page (Atari MMU, active low) |
-| `~CCTL` | 23 | D23 | 12 | IN | **sid-cctl / sid-demo**: $D500-$D5FF page (cartridge slot pin 15, active low) |
+| `~CCTL` | 23 | D23 | 12 | IN | **sid-cctl / sid-demo-cctl**: $D500-$D5FF page (cartridge slot pin 15, active low) |
 
 ## Commodore 64 Expansion Port (sid-c64-io1 / sid-c64-io2)
 
