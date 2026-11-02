@@ -752,157 +752,6 @@ Wire Wire Line
 	6225 4450 5950 4450
 Wire Wire Line
 	6225 4550 5950 4550
-Text Label 8950 4350 0    50   ~ 0
-mD2
-Text Label 8950 4450 0    50   ~ 0
-mD4
-Text Label 8950 4550 0    50   ~ 0
-mD5
-Text Label 8950 4650 0    50   ~ 0
-mD12
-Text Label 8950 4750 0    50   ~ 0
-mD13
-Text Label 8950 4850 0    50   ~ 0
-mD14
-Text Label 8950 4950 0    50   ~ 0
-mD15
-Text Label 8950 5050 0    50   ~ 0
-mD18
-Wire Wire Line
-	9225 4350 8950 4350
-Wire Wire Line
-	8950 4450 9225 4450
-Wire Wire Line
-	8950 4550 9225 4550
-Wire Wire Line
-	8950 4650 9225 4650
-Wire Wire Line
-	8950 4750 9225 4750
-Wire Wire Line
-	8950 4850 9225 4850
-Wire Wire Line
-	8950 4950 9225 4950
-Wire Wire Line
-	8950 5050 9225 5050
-Text Label 8950 5150 0    50   ~ 0
-mD19
-Text Label 8950 5250 0    50   ~ 0
-mD21
-Text Label 8950 5350 0    50   ~ 0
-mD22
-Text Label 8950 5450 0    50   ~ 0
-mD23
-Text Label 8950 5550 0    50   ~ 0
-mD25
-Text Label 8950 5650 0    50   ~ 0
-mD26
-Text Label 8950 5750 0    50   ~ 0
-mD27
-Text Label 8950 5850 0    50   ~ 0
-mD32
-Wire Wire Line
-	9225 5150 8950 5150
-Wire Wire Line
-	8950 5250 9225 5250
-Wire Wire Line
-	8950 5350 9225 5350
-Wire Wire Line
-	8950 5450 9225 5450
-Wire Wire Line
-	8950 5550 9225 5550
-Wire Wire Line
-	8950 5650 9225 5650
-Wire Wire Line
-	8950 5750 9225 5750
-Wire Wire Line
-	8950 5850 9225 5850
-Text Label 9950 5850 0    50   ~ 0
-mD33
-Text Label 9950 5750 0    50   ~ 0
-mD34
-Text Label 9950 5650 0    50   ~ 0
-mD35
-Text Label 9950 5550 0    50   ~ 0
-mVP
-Text Label 9950 5450 0    50   ~ 0
-mVN
-Text Label 9950 5350 0    50   ~ 0
-mRX2
-Text Label 9950 5250 0    50   ~ 0
-mTX2
-Wire Wire Line
-	9725 5850 9950 5850
-Wire Wire Line
-	9725 5750 9950 5750
-Wire Wire Line
-	9725 5650 9950 5650
-Wire Wire Line
-	9725 5550 9950 5550
-Wire Wire Line
-	9725 5450 9950 5450
-Wire Wire Line
-	9725 5350 9950 5350
-Wire Wire Line
-	9725 5250 9950 5250
-Wire Wire Line
-	9725 4350 10325 4350
-Wire Wire Line
-	10325 4350 10325 4225
-Wire Wire Line
-	9725 4450 10325 4450
-Wire Wire Line
-	10325 4450 10325 4350
-Connection ~ 10325 4350
-Wire Wire Line
-	9725 4550 10425 4550
-Wire Wire Line
-	9725 4650 10425 4650
-Wire Wire Line
-	10425 4650 10425 4550
-Connection ~ 10425 4550
-$Comp
-L power:GND #PWR0128
-U 1 1 68C6B270
-P 10425 4400
-F 0 "#PWR0128" H 10425 4150 50  0001 C CNN
-F 1 "GND" V 10430 4272 50  0000 R CNN
-F 2 "" H 10425 4400 50  0001 C CNN
-F 3 "" H 10425 4400 50  0001 C CNN
-	1    10425 4400
-	0    -1   -1   0   
-$EndComp
-Wire Wire Line
-	9725 4750 10675 4750
-Wire Wire Line
-	10675 4750 10675 4675
-Wire Wire Line
-	9725 4850 10675 4850
-Wire Wire Line
-	10675 4850 10675 4750
-Connection ~ 10675 4750
-Text Label 9950 4950 0    50   ~ 0
-EN
-Wire Wire Line
-	9725 4950 9950 4950
-Wire Wire Line
-	9725 5050 9950 5050
-Wire Wire Line
-	9725 5150 9950 5150
-NoConn ~ 9950 5050
-NoConn ~ 9950 5150
-$Comp
-L power:+3.3V #PWR0129
-U 1 1 68CE5E48
-P 10675 4675
-F 0 "#PWR0129" H 10675 4525 50  0001 C CNN
-F 1 "+3.3V" H 10690 4848 50  0000 C CNN
-F 2 "" H 10675 4675 50  0001 C CNN
-F 3 "" H 10675 4675 50  0001 C CNN
-	1    10675 4675
-	1    0    0    -1  
-$EndComp
-Wire Wire Line
-	10425 4400 10425 4550
 Wire Notes Line
 	1350 3200 3300 3200
 Wire Notes Line
@@ -1534,18 +1383,182 @@ Wire Wire Line
 	7640 1780 7850 1780
 Text Label 7850 1780 0    50   ~ 0
 5VCC
-Text Label 10325 4225 0    50   ~ 0
-5VCC
 $Comp
-L RetroBitLab:CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab J3
+L RetroBitLab:CONN_02x16_PIN_SMD_Odd_Even_2.54mm J3
 U 1 1 6A276616
 P 9425 5050
 F 0 "J3" H 9470 5885 50  0000 C CNN
-F 1 "CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab" H 9655 4095 50  0000 C CNN
+F 1 "CONN_02x16_PIN_SMD_Odd_Even_2.54mm" H 9530 4000 50  0000 C CNN
 F 2 "Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD" H 9425 5050 50  0001 C CNN
 F 3 "" H 9425 5050 50  0001 C CNN
 F 4 "C6332241" H 9425 5050 50  0001 C CNN "LCSC"
 	1    9425 5050
 	1    0    0    -1  
 $EndComp
+Wire Wire Line
+	9225 4350 8950 4350
+Text Label 8950 4350 0    50   ~ 0
+mD2
+Wire Wire Line
+	9725 4350 9950 4350
+Text Label 9950 4350 0    50   ~ 0
+mD4
+Wire Wire Line
+	9225 4450 8950 4450
+Text Label 8950 4450 0    50   ~ 0
+mD5
+Wire Wire Line
+	9725 4450 9950 4450
+Text Label 9950 4450 0    50   ~ 0
+mD12
+Wire Wire Line
+	9225 4550 8950 4550
+Text Label 8950 4550 0    50   ~ 0
+mD13
+Wire Wire Line
+	9725 4550 9950 4550
+Text Label 9950 4550 0    50   ~ 0
+mD14
+Wire Wire Line
+	9225 4650 8950 4650
+Text Label 8950 4650 0    50   ~ 0
+mD15
+Wire Wire Line
+	9725 4650 9950 4650
+Text Label 9950 4650 0    50   ~ 0
+mD18
+Wire Wire Line
+	9225 4750 8950 4750
+Text Label 8950 4750 0    50   ~ 0
+mD19
+Wire Wire Line
+	9725 4750 9950 4750
+Text Label 9950 4750 0    50   ~ 0
+mD21
+Wire Wire Line
+	9225 4850 8950 4850
+Text Label 8950 4850 0    50   ~ 0
+mD22
+Wire Wire Line
+	9725 4850 9950 4850
+Text Label 9950 4850 0    50   ~ 0
+mD23
+Wire Wire Line
+	9225 4950 8950 4950
+Text Label 8950 4950 0    50   ~ 0
+mD25
+Wire Wire Line
+	9725 4950 9950 4950
+Text Label 9950 4950 0    50   ~ 0
+mD26
+Wire Wire Line
+	9225 5050 8950 5050
+Text Label 8950 5050 0    50   ~ 0
+mD27
+Wire Wire Line
+	9725 5050 9950 5050
+Text Label 9950 5050 0    50   ~ 0
+mD32
+Wire Wire Line
+	9225 5150 8950 5150
+Text Label 8950 5150 0    50   ~ 0
+mD33
+Wire Wire Line
+	9725 5150 9950 5150
+Text Label 9950 5150 0    50   ~ 0
+mD34
+Wire Wire Line
+	9225 5250 8950 5250
+Text Label 8950 5250 0    50   ~ 0
+mD35
+Wire Wire Line
+	9725 5250 9950 5250
+Text Label 9950 5250 0    50   ~ 0
+mVP
+Wire Wire Line
+	9225 5350 8950 5350
+Text Label 8950 5350 0    50   ~ 0
+mVN
+Wire Wire Line
+	9725 5350 9950 5350
+Text Label 9950 5350 0    50   ~ 0
+mRX2
+Wire Wire Line
+	9225 5450 8950 5450
+Text Label 8950 5450 0    50   ~ 0
+mTX2
+NoConn ~ 9725 5450
+NoConn ~ 9225 5550
+Wire Wire Line
+	9725 5550 9950 5550
+Text Label 9950 5550 0    50   ~ 0
+EN
+Wire Wire Line
+	9225 5650 8725 5650
+Wire Wire Line
+	8725 5650 8725 5550
+$Comp
+L power:+3.3V #PWR0127
+U 1 1 BD95C8A1
+P 8725 5550
+F 0 "#PWR0127" H 8725 5400 50  0001 C CNN
+F 1 "+3.3V" H 8740 5723 50  0000 C CNN
+F 2 "" H 8725 5550 50  0001 C CNN
+F 3 "" H 8725 5550 50  0001 C CNN
+	1    8725 5550
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	9725 5650 10300 5650
+Wire Wire Line
+	10300 5650 10300 5550
+$Comp
+L power:+3.3V #PWR0129
+U 1 1 315D43B7
+P 10300 5550
+F 0 "#PWR0129" H 10300 5400 50  0001 C CNN
+F 1 "+3.3V" H 10315 5723 50  0000 C CNN
+F 2 "" H 10300 5550 50  0001 C CNN
+F 3 "" H 10300 5550 50  0001 C CNN
+	1    10300 5550
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	9225 5750 8750 5750
+Wire Wire Line
+	8750 5750 8750 5850
+$Comp
+L power:GND #PWR0131
+U 1 1 24C67FFD
+P 8750 5850
+F 0 "#PWR0131" H 8750 5600 50  0001 C CNN
+F 1 "GND" H 8755 5677 50  0000 C CNN
+F 2 "" H 8750 5850 50  0001 C CNN
+F 3 "" H 8750 5850 50  0001 C CNN
+	1    8750 5850
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	9725 5750 10400 5750
+Wire Wire Line
+	10400 5750 10400 5850
+$Comp
+L power:GND #PWR0128
+U 1 1 7E0E92B6
+P 10400 5850
+F 0 "#PWR0128" H 10400 5600 50  0001 C CNN
+F 1 "GND" H 10405 5677 50  0000 C CNN
+F 2 "" H 10400 5850 50  0001 C CNN
+F 3 "" H 10400 5850 50  0001 C CNN
+	1    10400 5850
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	9225 5850 8950 5850
+Text Label 8950 5850 0    50   ~ 0
+5VCC
+Wire Wire Line
+	9725 5850 9950 5850
+Text Label 9950 5850 0    50   ~ 0
+5VCC
 $EndSCHEMATC

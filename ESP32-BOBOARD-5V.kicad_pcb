@@ -2352,7 +2352,7 @@
     (fp_text reference J3 (at 0 -21.38) (layer F.SilkS)
       (effects (font (size 1 1) (thickness 0.15)))
     )
-    (fp_text value CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab (at 0 21.38) (layer F.Fab)
+    (fp_text value CONN_02x16_PIN_SMD_Odd_Even_2.54mm (at 0 21.38) (layer F.Fab)
       (effects (font (size 1 1) (thickness 0.15)))
     )
     (fp_line (start 5.9 -20.85) (end -5.9 -20.85) (layer F.CrtYd) (width 0.05))

@@ -267,11 +267,11 @@
       (sheetpath (names /) (tstamps /))
       (tstamp 68DD38DD))
     (comp (ref J3)
-      (value CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab)
+      (value CONN_02x16_PIN_SMD_Odd_Even_2.54mm)
       (footprint Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD)
       (fields
         (field (name LCSC) C6332241))
-      (libsource (lib RetroBitLab) (part CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab) (description ""))
+      (libsource (lib RetroBitLab) (part CONN_02x16_PIN_SMD_Odd_Even_2.54mm) (description ""))
       (sheetpath (names /) (tstamps /))
       (tstamp 6A276616)))
   (libparts
@@ -398,12 +398,12 @@
         (pin (num 18) (name B2) (type BiDi))
         (pin (num 19) (name VCCB) (type power_in))
         (pin (num 20) (name B1) (type BiDi))))
-    (libpart (lib RetroBitLab) (part CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab)
+    (libpart (lib RetroBitLab) (part CONN_02x16_PIN_SMD_Odd_Even_2.54mm)
       (footprints
         (fp Connector*:*_2x??_*))
       (fields
         (field (name Reference) J)
-        (field (name Value) CONN_02x16_PIN_SMD_Counter_Clockwise-RetroBitLab)
+        (field (name Value) CONN_02x16_PIN_SMD_Odd_Even_2.54mm)
         (field (name Footprint) Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical_SMD)
         (field (name LCSC) C6332241))
       (pins
