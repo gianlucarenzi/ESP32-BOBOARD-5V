@@ -29,6 +29,19 @@ translators to J3 (5 V side).
 | `~D1XX` | 22 | D22 | 11 | IN | **sid-pbi**: $D100-$D1FF page (Atari MMU, active low) |
 | `~CCTL` | 23 | D23 | 12 | IN | **sid-cctl / sid-demo**: $D500-$D5FF page (cartridge slot pin 15, active low) |
 
+## Commodore 64 Expansion Port (sid-c64-io1 / sid-c64-io2)
+
+Same GPIOs and J3 pins as above for D0-D7, A0-A7, PHI2 and R/W; the select
+line is the one of the build:
+
+| Signal | GPIO | J3 pin | C64 port pin | Build |
+|---|---|---|---|---|
+| `/IO1` | 23 | 12 | 7 | **sid-c64-io1**: $DE00-$DEFF |
+| `/IO2` | 22 | 11 | 10 | **sid-c64-io2**: $DF00-$DFFF |
+
+Wiring: [`../6502_monitor/docs/wiring_c64.svg`](../6502_monitor/docs/wiring_c64.svg)
+(it shows both lines: the GeoRAM build uses both).
+
 Wiring to the 130XE cartridge slot and ECI: see the infographics in
 [`../6502_monitor/docs/`](../6502_monitor/docs/wiring_atari.svg).  Never
 connect J3 26 (EN) and 27-28 (+3V3) to the computer.
@@ -58,4 +71,7 @@ sid-pbi:   ~D1XX low  -> $D100 + A0-A7
              $00-$1E  SID registers, while selected
              $FF      PBI select latch (W): bit 7 = 1 select, 0 deselect; never driven
              $1F-$FE  not decoded
+sid-c64-io1: /IO1 low -> $DE00 + A0-A7     sid-c64-io2: /IO2 low -> $DF00 + A0-A7
+             $00-$1E  SID registers (always on)
+             $1F-$FF  not decoded
 ```

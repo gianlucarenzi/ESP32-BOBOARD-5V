@@ -4,8 +4,10 @@ Firmware for the **ESP32-BOBOARD-5V** (NodeMCU-32S) on the Atari 8-bit bus:
 
 - **SID 6581/8580 sound** (cSIDLight: 3 square-wave voices, frequency, gate,
   master volume; ESP32 DAC1 on GPIO 25, 22.2 kHz)
-- two builds: **CCTL** (`$D500`, always on) or **PBI device** (`$D100`,
-  select latch `$D1FF`)
+- two Atari builds: **CCTL** (`$D500`, always on) or **PBI device**
+  (`$D100`, select latch `$D1FF`)
+- two **Commodore 64** builds (second SID on the expansion port): block
+  **`/IO1`** (`$DE00`) or **`/IO2`** (`$DF00`)
 - the bus loop of the [6502_monitor](../6502_monitor/README.md) firmware:
   PHI1 decode in assembly on Core 1, interrupts masked, lock-free log
 - timestamped serial log of every access to the SID page
@@ -19,6 +21,8 @@ Firmware for the **ESP32-BOBOARD-5V** (NodeMCU-32S) on the Atari 8-bit bus:
 | `sid-cctl` | `$D500-$D51E` | always on, no latch, no configuration | Atari `~CCTL` → J3 pin 12 |
 | `sid-pbi` | `$D100-$D11E` | PBI device ID `$80`: write `$80` to `$D1FF` to select, `$00` to deselect | `~D1XX` → J3 pin 11 |
 | `sid-demo` | as `sid-cctl` | plus a built-in tune (`AUDIO_DEMO`, Commando at 50 Hz) | as `sid-cctl` |
+| `sid-c64-io1` | `$DE00-$DE1E` | C64, always on (`SID_C64_IO=1`) | C64 `/IO1` (port pin 7) → J3 pin 12 |
+| `sid-c64-io2` | `$DF00-$DF1E` | C64, always on (`SID_C64_IO=2`) | C64 `/IO2` (port pin 10) → J3 pin 11 |
 
 Only A0-A7 are sampled: the page comes from the select line.  Offsets
 `$1F-$FE` of the page are not decoded (never driven, writes ignored).
@@ -36,6 +40,18 @@ access the registers directly.
 through CCTL (XEGS, AtariMax, SpartaDOS X, ...) cannot be used with it; use
 `sid-pbi` then.
 
+**C64 (`sid-c64-io1` / `sid-c64-io2`):** the block is chosen at build time
+with `-D SID_C64_IO=1` or `2` (`SID_BUS_C64=1`); only that select line needs
+to be wired, the other block is never touched.  The C64 has no
+PBI-like select latch: the SID answers whenever its block is decoded, so
+pick the block that no other cartridge uses.  `/IO2` (`$DF00`) clashes with
+a REU (17xx, Ultimate, Kung Fu Flash ...) and the GeoRAM registers;
+`/IO1` (`$DE00`) with EasyFlash, MIDI and SwiftLink / RR-Net interfaces:
+`sid-c64-io1` is the default choice.  The rest of the C64 wiring (data,
+A0-A7, PHI2, R/W, GND, +5V) is the one of the 6502_monitor `c64` build, see
+[`wiring_c64.svg`](../6502_monitor/docs/wiring_c64.svg).  The expansion
+port has no audio input: DAC1 goes to an external amplifier or mixer.
+
 ---
 
 ## Pin Mapping
@@ -51,6 +67,8 @@ infographics in [`../6502_monitor/docs/`](../6502_monitor/docs/wiring_atari.svg)
 | PHI2 / R/W | 2 / 15 | 1 / 7 |
 | `~D1XX` (sid-pbi) | 22 | 11 |
 | `~CCTL` (sid-cctl) | 23 | 12 |
+| C64 `/IO2` (sid-c64-io2) | 22 | 11 |
+| C64 `/IO1` (sid-c64-io1) | 23 | 12 |
 | DAC1 audio | 25 | (module pin) |
 | TX debug | 1 | J4 pin 3 |
 
@@ -62,7 +80,8 @@ infographics in [`../6502_monitor/docs/`](../6502_monitor/docs/wiring_atari.svg)
 
 ## SID Register Map
 
-Base `$D500` (sid-cctl) or `$D100` (sid-pbi).
+Base `$D500` (sid-cctl), `$D100` (sid-pbi), `$DE00` (sid-c64-io1) or
+`$DF00` (sid-c64-io2).
 
 | Offset | Register | Emulated |
 |--------|----------|----------|
@@ -220,6 +239,8 @@ range of the square-wave voices.
 pio run -e sid-cctl -t upload     # SID at $D500
 pio run -e sid-pbi  -t upload     # SID at $D100, PBI device
 pio run -e sid-demo -t upload     # built-in tune, no Atari needed
+pio run -e sid-c64-io1 -t upload  # C64: SID at $DE00 (/IO1)
+pio run -e sid-c64-io2 -t upload  # C64: SID at $DF00 (/IO2)
 pio device monitor
 ```
 
@@ -229,7 +250,11 @@ VDD_SDIO efuses before every upload and burns them to 3.3 V if blank
 (**irreversible**; GPIO12 is still wired to J3 pin 4), and the serial
 monitor does not toggle RTS / DTR.  Bus timing can be tuned with
 `-D BUS_ADDR_SETTLE_NS=...`, `-D BUS_WR_SAMPLE_NS=...`,
-`-D BUS_PHI2_HIGH_MAX_NS=...`.
+`-D BUS_PHI2_HIGH_MAX_NS=...`; on the C64 builds `-D IO_QUALIFY_NS=...`
+(select poll after the PHI2 rise, 200 ns) and `-D BUS_WR_SAMPLE_NS=...`
+(300 ns).
+
+**Never plug or unplug the board with the C64 powered on.**
 
 ---
 
@@ -266,6 +291,17 @@ SID[0x18] = 0x0F;                      /* volume */
 SID[0x04] = 0x11;                      /* GATE + SQR */
 ```
 
+### Commodore 64 (BASIC V2)
+
+```basic
+10 S=56832          : REM $DE00 for sid-c64-io1, 57088 ($DF00) for sid-c64-io2
+20 POKE S,100       : REM V1 FREQ LO
+30 POKE S+1,10      : REM V1 FREQ HI
+40 POKE S+24,15     : REM MODE/VOL: max volume
+50 POKE S+4,17      : REM V1 CTRL: GATE + SQR
+60 PRINT PEEK(S+4)  : REM read back V1 CTRL
+```
+
 ### Dump players (`examples/`)
 
 A dump is a flat list of frames of 25 bytes (SID registers `$00-$18`), one
@@ -296,7 +332,7 @@ were rewritten for direct register access.
 
 ```
 sidboard/
-├── platformio.ini       sid-cctl, sid-pbi, sid-demo
+├── platformio.ini       sid-cctl, sid-pbi, sid-demo, sid-c64-io1, sid-c64-io2
 ├── efuse_vdd_sdio.py    VDD_SDIO efuse check before upload (from 6502_monitor)
 ├── PIN_MAPPING.md       pins and register map
 ├── Logs.md              decisions and change log

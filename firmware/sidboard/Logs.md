@@ -1,6 +1,13 @@
 # Project Logs & Architectural Decisions - SIDBOARD
 
 
+## 2026-11-02: Commodore 64 Builds, /IO1 or /IO2 Block
+
+- New environments **`sid-c64-io1`** (SID at `$DE00-$DE1E`, `/IO1` → J3 pin 12, GPIO23) and **`sid-c64-io2`** (`$DF00-$DF1E`, `/IO2` → J3 pin 11, GPIO22): `-D SID_BUS_C64=1 -D SID_C64_IO=1|2`, any other value stops the build.  Always on (no latch on the C64); only the chosen line is read, so the other block stays free for a REU / GeoRAM / EasyFlash.
+- C64 bus loop from the 6502_monitor `c64` build: decode while PHI2 is high (the VIC-II owns PHI1), select polled for `IO_QUALIFY_NS` = 200 ns after the rise, read byte driven at once until PHI2 falls, write sampled `BUS_WR_SAMPLE_NS` = 300 ns after the rise.  The Atari builds are unchanged.
+- `/IO1` recommended: `/IO2` clashes with a REU, the most common C64 expansion today.
+- Built for all five environments; not yet tried on a C64.
+
 ## 2026-11-01: Bus Loop from 6502_monitor, CCTL and PBI Builds
 
 ### Builds

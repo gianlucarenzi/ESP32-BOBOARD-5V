@@ -3,7 +3,7 @@
  *
  * FIRMWARE: NodeMCU-32S (ESP32-WROOM, Xtensa LX6).
  *
- * Two builds (PlatformIO environments), same board and wiring:
+ * Atari builds (PlatformIO environments), same board and wiring:
  * - sid-cctl (SID_MODE_PBI = 0): the SID sits in the cartridge control area,
  *   always on, no latch, no configuration:
  *     $D500-$D51E  SID registers (~CCTL, J3 pin 12)
@@ -17,6 +17,14 @@
  * Only A0-A7 are sampled: the page comes from the select line.  Offsets
  * $1F-$FE of the page are not decoded (never driven, writes ignored).
  * Reads of $00-$1E return the stored register byte.
+ *
+ * Commodore 64 builds (SID_BUS_C64 = 1), a second SID on the expansion port,
+ * always on, block chosen at build time with SID_C64_IO:
+ * - sid-c64-io1 (SID_C64_IO = 1): $DE00-$DE1E, /IO1 -> J3 pin 12 (GPIO23)
+ * - sid-c64-io2 (SID_C64_IO = 2): $DF00-$DF1E, /IO2 -> J3 pin 11 (GPIO22)
+ * Only the chosen line needs to be wired; the other block is never touched.
+ * The bus loop decodes while PHI2 is high (the VIC-II owns PHI1), as the
+ * 6502_monitor c64 build.
  *
  * AUDIO: cSIDLight (include/csidlight.h), 3 square-wave voices, frequency,
  * gate and master volume; DAC1 on GPIO 25 at 22.2 kHz from an esp_timer on
@@ -55,6 +63,12 @@
 #ifndef SID_MODE_PBI
 #define SID_MODE_PBI 0
 #endif
+#ifndef SID_BUS_C64
+#define SID_BUS_C64 0
+#endif
+#if SID_BUS_C64 && SID_MODE_PBI
+#error "SID_MODE_PBI is an Atari build: not with SID_BUS_C64"
+#endif
 
 // ---------------------------------------------------------------------------
 // Pin Definitions (ESP32-BOBOARD-5V, same as the 6502_monitor firmware)
@@ -81,7 +95,20 @@
 #define PIN_RW     15
 #define PIN_UART_TX 1
 
-#if SID_MODE_PBI
+#if SID_BUS_C64
+#ifndef SID_C64_IO
+#define SID_C64_IO 1
+#endif
+#if SID_C64_IO == 1
+#define PIN_SEL_N  PIN_CCTL_N  // /IO1, $DE00-$DEFF (J3 pin 12)
+#define SID_PAGE   0xDE
+#elif SID_C64_IO == 2
+#define PIN_SEL_N  PIN_D1XX_N  // /IO2, $DF00-$DFFF (J3 pin 11)
+#define SID_PAGE   0xDF
+#else
+#error "SID_C64_IO must be 1 (/IO1, $DE00) or 2 (/IO2, $DF00)"
+#endif
+#elif SID_MODE_PBI
 #define PIN_SEL_N  PIN_D1XX_N
 #define SID_PAGE   0xD1
 #else
@@ -109,6 +136,21 @@ static_assert(SID_NUM_REGS == 31, "movi 31 in the bus loop assembly");
 // ---------------------------------------------------------------------------
 // Bus Timing (see 6502_monitor; tune with -D after measuring the bus)
 // ---------------------------------------------------------------------------
+#if SID_BUS_C64
+/*
+ * C64: the 6510 address, R/W and /IO1 / /IO2 are valid only while PHI2 is
+ * high (~490 ns).  After the rise the loop polls the select for at most
+ * IO_QUALIFY_NS; read data must be valid t_DSU (100 ns) before PHI2 falls,
+ * write data t_MDS (<= 200 ns) after it rises.
+ */
+#ifndef IO_QUALIFY_NS
+#define IO_QUALIFY_NS 200u
+#endif
+#define BUS_ADDR_SETTLE_NS IO_QUALIFY_NS   // log banner only
+#ifndef BUS_WR_SAMPLE_NS
+#define BUS_WR_SAMPLE_NS 300u
+#endif
+#endif
 #ifndef BUS_ADDR_SETTLE_NS
 #define BUS_ADDR_SETTLE_NS 200u
 #endif
@@ -236,6 +278,13 @@ BUS_INLINE uint32_t gpio_in(void)
     return v;
 }
 
+BUS_INLINE uint32_t gpio_in1(void)
+{
+    uint32_t v;
+    asm volatile("l32i %0, %1, %2" : "=r"(v) : "r"(&GPIO), "n"(GPIO_OFF(in1)));
+    return v;
+}
+
 BUS_INLINE void gpio_out(uint32_t v)
 {
     asm volatile("s32i %0, %1, %2" : : "r"(v), "r"(&GPIO), "n"(GPIO_OFF(out)) : "memory");
@@ -322,6 +371,104 @@ static void bus_int_wdt_disable(void)
 // ============================================================================
 // MonitorTask -- Core 1, IRAM-resident, interrupts masked
 // ============================================================================
+#if SID_BUS_C64
+/*
+ * C64 bus loop: everything happens while PHI2 is high.  PHI2 rises, poll the
+ * select line (/IO1 or /IO2) for at most IO_QUALIFY_NS (not low: not ours,
+ * or a VIC-II cycle); then sample A0-A7: a read of $00-$1E drives the byte at
+ * once and until PHI2 falls, a write is sampled BUS_WR_SAMPLE_NS after the
+ * rise.  Plenty of time at 1 MHz: the decode is plain C.
+ */
+static void IRAM_ATTR MonitorTask(void *pvParameters)
+{
+    const uint32_t m_rw   = (1UL << PIN_RW);
+    const uint32_t m_sel  = (1UL << PIN_SEL_N);
+    const uint32_t m_phi2 = (1UL << PIN_PHI2);
+
+    const uint32_t qualify   = NS_TO_CYCLES(IO_QUALIFY_NS);
+    const uint32_t wr_sample = NS_TO_CYCLES(BUS_WR_SAMPLE_NS);
+
+    uint32_t cyc_hi = 0;
+    uint32_t t_prev = cpu_ll_get_cycle_count();
+    LogEvt   pend;
+    bool     pend_valid = false;
+
+    bus_release();
+    gpio_out(0);
+
+    bus_int_wdt_disable();
+    portDISABLE_INTERRUPTS();
+
+    wait_phi2_low();
+
+    for (;;)
+    {
+        // ---- PHI1: the VIC-II's half; log the previous cycle ---------------
+        if (pend_valid)
+        {
+            log_push(&pend);
+            pend_valid = false;
+        }
+
+        // ---- PHI2 high: the 6510's half -------------------------------------
+        wait_phi2_high();
+        const uint32_t t_rise = cpu_ll_get_cycle_count();
+        if (t_rise < t_prev)
+            cyc_hi++;
+        t_prev = t_rise;
+
+        const uint32_t t_limit = t_rise + qualify;
+        uint32_t lo;
+        while ((lo = gpio_in()) & m_sel)
+            if ((int32_t)(cpu_ll_get_cycle_count() - t_limit) >= 0)
+                break;
+        if (lo & m_sel)
+        {
+            wait_phi2_low();                // not the SID block
+            continue;
+        }
+        const uint32_t off = addr_lut_hi[gpio_in1() & 0xFFu] | addr_lut_lo[(lo >> 21) & 0x7Fu];
+
+        pend.cyc_lo = t_rise;
+        pend.cyc_hi = cyc_hi;
+        pend.offset = (uint8_t)off;
+        pend.type   = EVT_REG;
+        pend_valid  = true;
+
+        if (lo & m_rw)
+        {
+            if (off < SID_NUM_REGS)
+            {
+                const uint8_t v = sid_bus.regs[off];
+                gpio_out(drive_lut[v]);
+                bus_drive_enable();
+                pend.data  = v;
+                pend.flags = FL_SEL | FL_DRIVEN;
+                wait_phi2_low();
+                bus_release();              // the VIC-II reads in PHI1
+            }
+            else
+            {
+                uint32_t last = lo, now;
+                while ((now = gpio_in()) & m_phi2)
+                    last = now;
+                pend.data  = decode_data(last);
+                pend.flags = FL_SEL;
+            }
+        }
+        else
+        {
+            wait_until(t_rise + wr_sample);
+            const uint8_t data = decode_data(gpio_in());
+            pend.data  = data;
+            pend.flags = FL_WRITE | FL_SEL;
+            if (off < SID_NUM_REGS)
+                sid_bus.regs[off] = data;   // cSIDLight::write(), inlined
+            wait_phi2_low();
+        }
+    }
+}
+#else
 static void IRAM_ATTR MonitorTask(void *pvParameters)
 {
     const uint32_t m_rw   = (1UL << PIN_RW);
@@ -480,6 +627,7 @@ static void IRAM_ATTR MonitorTask(void *pvParameters)
         }
     }
 }
+#endif  // SID_BUS_C64
 
 // ============================================================================
 // SidTask -- Core 0: register changes -> synthesis parameters (the samples
@@ -584,7 +732,10 @@ static void log_drain(void)
 static void LogTask(void *arg)
 {
     Serial.begin(LOG_BAUD, SERIAL_8N1, -1, PIN_UART_TX);
-#if SID_MODE_PBI
+#if SID_BUS_C64
+    log_line("\n[sidboard] C64 SID, always on: $%02X00-$%02X1E (/IO%u, J3 pin %u)\n",
+             SID_PAGE, SID_PAGE, (unsigned)SID_C64_IO, SID_C64_IO == 1 ? 12u : 11u);
+#elif SID_MODE_PBI
     log_line("\n[sidboard] SID PBI device, ID $%02X: $D100-$D11E, select $D1FF "
              "(~D1XX, J3 pin 11)\n", (unsigned)PBI_DEV_ID);
 #else
@@ -595,8 +746,13 @@ static void LogTask(void *arg)
 #ifdef AUDIO_DEMO
     log_line("[sidboard] AUDIO_DEMO: Commando, %d frames @ 50 Hz (looping)\n", demo_total);
 #endif
+#if SID_BUS_C64
+    log_line("[sidboard] Bus loop on Core 1 (select qualify %u ns, write sample %u ns), log %u baud\n",
+             (unsigned)IO_QUALIFY_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
+#else
     log_line("[sidboard] Bus loop on Core 1 (settle %u ns, write sample %u ns), log %u baud\n",
              (unsigned)BUS_ADDR_SETTLE_NS, (unsigned)BUS_WR_SAMPLE_NS, (unsigned)LOG_BAUD);
+#endif
 
     bool fail_seen = false;
     for (;;)
@@ -637,7 +793,7 @@ void setup()
     // cSIDLight starts its esp_timer here (Core 0 timer task).
     sidLight     = new cSIDLight();
     sid_bus.regs = sidLight->regs();
-    sid_bus.sel  = SID_MODE_PBI ? 0 : 1;
+    sid_bus.sel  = (SID_MODE_PBI && !SID_BUS_C64) ? 0 : 1;
 
 #ifdef AUDIO_DEMO
     {
