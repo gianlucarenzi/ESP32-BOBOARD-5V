@@ -47,8 +47,8 @@ def draw(title, subtitle, connectors, links, notes, fname):
     PJ = PC = 36
     X0 = 60
     WIDTH = X0 * 2 + 32 * PJ + 40
-    BOARD_Y, BOARD_H = 90, 190
-    HDR_Y = BOARD_Y + BOARD_H - 34        # J3 header body top
+    BOARD_Y, BOARD_H = 90, 240
+    HDR_Y = BOARD_Y + BOARD_H - 72        # J3 header body top (2 rows)
     LANE_Y = BOARD_Y + BOARD_H + 40
     LANE_DY = 12
     CONN_Y = LANE_Y + len(links) * LANE_DY + 50
@@ -74,21 +74,30 @@ def draw(title, subtitle, connectors, links, notes, fname):
     o.append(f'<text x="{mx+70}" y="{my+44}" font-size="12" text-anchor="middle" fill="#ddd">NodeMCU-32S</text>')
     o.append(f'<text x="{X0+60}" y="{BOARD_Y+40}" font-size="15" font-weight="bold" fill="#ffffff">ESP32-BOBOARD-5V</text>')
     o.append(f'<text x="{X0+60}" y="{BOARD_Y+58}" font-size="11" fill="#d8f0d8">3 x TXS0108E  3.3 V / 5 V</text>')
-    # J3 header
-    o.append(f'<rect x="{X0+8}" y="{HDR_Y}" width="{32*PJ}" height="{PJ-6}" rx="2" fill="#2b2b2b"/>')
-    o.append(f'<text x="{X0+8}" y="{HDR_Y-62}" font-size="12" font-weight="bold" fill="#ffffff">J3</text>')
+    # J3 header: 2x16, numbered as the PCB footprint pads (PinHeader_2x16
+    # odd/even: 1 opposite 2 ... 31 opposite 32), seen from the top with
+    # pin 1 on the left: odd pins on the lower row, even pins on the upper.
+    # An even pin's wire leaves sideways by half a column, so its vertical
+    # run passes between the odd pins of the lower row.
+    o.append(f'<rect x="{X0+14}" y="{HDR_Y}" width="{32*PJ-24}" height="50" rx="2" fill="#2b2b2b"/>')
+    o.append(f'<text x="{X0+60}" y="{BOARD_Y+76}" font-size="11" fill="#d8f0d8">'
+             f'<tspan font-weight="bold" fill="#ffffff">J3</tspan> 2x16: odd pins lower row '
+             f'(pin 1 left), even pins upper row</text>')
     jx = {}
+    jexit = {}
     used = {l[0] for l in links}
     for p in range(1, 33):
-        cx = X0 + 8 + (p - 1) * PJ + PJ / 2
-        cy = HDR_Y + (PJ - 6) / 2
+        cx = X0 + 8 + PJ / 2 + ((p - 1) // 2) * 2 * PJ
+        cy = HDR_Y + (37 if p % 2 else 13)
         jx[p] = (cx, cy)
+        jexit[p] = [] if p % 2 else [(cx + PJ, cy)]
         o.append(f'<rect x="{cx-4}" y="{cy-4}" width="8" height="8" fill="#d4b04c" stroke="#8a6d1f"/>')
         sig = W.J3[p]
         col = "#ffffff" if p in used else "#9fc7a9"
         lab = f"{p} {sig.split(' ')[0]}"
-        o.append(f'<text x="{cx+4}" y="{HDR_Y-6}" font-size="10" fill="{col}" '
-                 f'transform="rotate(-90 {cx+4} {HDR_Y-6})">{esc(lab)}</text>')
+        tx = cx - 4 if p % 2 else cx + 12
+        o.append(f'<text x="{tx}" y="{HDR_Y-6}" font-size="10" fill="{col}" '
+                 f'transform="rotate(-90 {tx} {HDR_Y-6})">{esc(lab)}</text>')
 
     # ---- the computer connectors ----------------------------------------
     cpos = {}
@@ -120,10 +129,11 @@ def draw(title, subtitle, connectors, links, notes, fname):
     order = sorted(links, key=lambda l: cpos[(l[2], l[3])][0])
     segs = []
     for k, (p, sig, cname, lab) in enumerate(order):
-        x1, y1 = jx[p]
+        start = [jx[p]] + jexit[p]
+        x1 = start[-1][0]
         x2, y2 = cpos[(cname, lab)]
         ly = LANE_Y + k * LANE_DY
-        pts = [(x1, y1), (x1, ly), (x2, ly), (x2, y2)]
+        pts = start + [(x1, ly), (x2, ly), (x2, y2)]
         segs.append((pts, wire_col(sig)))
     for pts, c in segs:                   # outline, then colour, Fritzing style
         d = " ".join(f"{x},{y}" for x, y in pts)

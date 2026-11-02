@@ -1,5 +1,10 @@
 # Project Logs & Architectural Decisions
 
+## 2026-11-02: J3 in the Breadboard Drawings
+
+- **J3 drawn as 2x16** (`docs/breadboard.py`): it was a single row of 32 contacts.  Now two rows numbered as the PCB footprint pads (`PinHeader_2x16_P2.54mm_Vertical_SMD`, odd / even: 1 opposite 2 ... 31 opposite 32), seen from the top with pin 1 on the left: odd pins on the lower row, even pins on the upper row.  An even pin's wire leaves sideways by half a column so its vertical run passes between the odd pins; every run stays on the 36 px grid, still off the connector contacts.
+- **Symbol / footprint mismatch**: the schematic symbol is `CONN_02x16_PIN_SMD_Counter_Clockwise` (1-16 down the left, 17-32 up the right, 1 opposite 32), while the footprint numbers the pads odd / even.  Nets follow the pad numbers, so the board is odd / even and the drawing follows the board, not the symbol drawing.
+
 ## 2026-11-01: ROM-less Banked RAM (GeoRAM Style, Fixed Roles), GEODISK D9:, C64 GeoRAM and Test, Bus Loop from RBL-XE, Serial Log, Bootstrap
 
 ### GEODISK.SYS: D9: RAM Disk for MyDOS (`atari-geodisk/`)
