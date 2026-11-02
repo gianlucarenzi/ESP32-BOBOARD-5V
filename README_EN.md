@@ -105,7 +105,7 @@ View 3D models directly in your browser:
 
 [![🔗 View STEP on CAD Exchanger](https://img.shields.io/badge/🔗-View%20STEP%20on%20CAD%20Exchanger-blue?style=for-the-badge)](https://viewer.cadexchanger.com/)
 
-[![🔗 View on 3D Viewer Online](https://img.shields.io/badge/🔗-View%20on%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/?file=https://raw.githubusercontent.com/gianlucarenzi/esp32-boboard-5v/main/3D/ESP32-BOBOARD-5V.step)
+[![🔗 View on 3D Viewer Online](https://img.shields.io/badge/🔗-View%20on%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/?file=https://raw.githubusercontent.com/gianlucarenzi/esp32-boboard-5v/master/images/ESP32-BOBOARD-5V.step)
 
 [![🔗 View on Autodesk Viewer](https://img.shields.io/badge/🔗-View%20on%20Autodesk%20Viewer-orange?style=for-the-badge)](https://viewer.autodesk.com/)
 
@@ -115,8 +115,8 @@ View 3D models directly in your browser:
 
 | Format | Description | Download |
 |---------|-------------|----------|
-| **STEP** | Parametric CAD model | [![📁 Download STEP](https://img.shields.io/badge/📁-Download%20STEP-orange?style=flat-square)](3D/ESP32-BOBOARD-5V.step) |
-| **WRL** | VRML model for rendering | [![📁 Download WRL](https://img.shields.io/badge/📁-Download%20WRL-purple?style=flat-square)](3D/ESP32-BOBOARD-5V.wrl) |
+| **STEP** | Parametric CAD model | [![📁 Download STEP](https://img.shields.io/badge/📁-Download%20STEP-orange?style=flat-square)](images/ESP32-BOBOARD-5V.step) |
+| **WRL** | VRML model for rendering | [![📁 Download WRL](https://img.shields.io/badge/📁-Download%20WRL-purple?style=flat-square)](images/ESP32-BOBOARD-5V.wrl) |
 
 ### 🖼️ 3D Image Gallery
 
@@ -423,8 +423,10 @@ ESP32-BOBOARD-5V/
 ├── 📁 3D/
 │   ├── 🖼️ ESP32-BOBOARD-5V.png    # 3D render
 │   ├── 🖼️ ESP32-BOBOARD-5V_TOP.png
-│   ├── 🖼️ ESP32-BOBOARD-5V_BOTTOM.png
-│   └── 📄 ESP32-BOBOARD-5V.step   # 3D model
+│   └── 🖼️ ESP32-BOBOARD-5V_BOTTOM.png
+├── 📁 images/
+│   ├── 📄 ESP32-BOBOARD-5V.step   # 3D model (output_job.sh)
+│   └── 📄 ESP32-BOBOARD-5V.wrl    # VRML model (output_job.sh)
 ├── 📁 production/
 │   ├── 📄 *.gbl, *.gtl           # Gerber files
 │   ├── 📄 *.drl                  # Drill files

@@ -105,7 +105,7 @@ Visualizza i modelli 3D direttamente nel browser:
 
 [![🔗 Visualizza STEP su CAD Exchanger](https://img.shields.io/badge/🔗-Visualizza%20STEP%20su%20CAD%20Exchanger-blue?style=for-the-badge)](https://viewer.cadexchanger.com/)
 
-[![🔗 Visualizza su 3D Viewer Online](https://img.shields.io/badge/🔗-Visualizza%20su%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/?file=https://raw.githubusercontent.com/gianlucarenzi/esp32-boboard-5v/main/3D/ESP32-BOBOARD-5V.step)
+[![🔗 Visualizza su 3D Viewer Online](https://img.shields.io/badge/🔗-Visualizza%20su%203D%20Viewer%20Online-green?style=for-the-badge)](https://3dviewer.net/?file=https://raw.githubusercontent.com/gianlucarenzi/esp32-boboard-5v/master/images/ESP32-BOBOARD-5V.step)
 
 [![🔗 Visualizza su Autodesk Viewer](https://img.shields.io/badge/🔗-Visualizza%20su%20Autodesk%20Viewer-orange?style=for-the-badge)](https://viewer.autodesk.com/)
 
@@ -115,8 +115,8 @@ Visualizza i modelli 3D direttamente nel browser:
 
 | Formato | Descrizione | Download |
 |---------|-------------|----------|
-| **STEP** | Modello CAD parametrico | [![📁 Download STEP](https://img.shields.io/badge/📁-Download%20STEP-orange?style=flat-square)](3D/ESP32-BOBOARD-5V.step) |
-| **WRL** | Modello VRML per rendering | [![📁 Download WRL](https://img.shields.io/badge/📁-Download%20WRL-purple?style=flat-square)](3D/ESP32-BOBOARD-5V.wrl) |
+| **STEP** | Modello CAD parametrico | [![📁 Download STEP](https://img.shields.io/badge/📁-Download%20STEP-orange?style=flat-square)](images/ESP32-BOBOARD-5V.step) |
+| **WRL** | Modello VRML per rendering | [![📁 Download WRL](https://img.shields.io/badge/📁-Download%20WRL-purple?style=flat-square)](images/ESP32-BOBOARD-5V.wrl) |
 
 ### 🖼️ Galleria Immagini 3D
 
@@ -423,8 +423,10 @@ ESP32-BOBOARD-5V/
 ├── 📁 3D/
 │   ├── 🖼️ ESP32-BOBOARD-5V.png    # Render 3D
 │   ├── 🖼️ ESP32-BOBOARD-5V_TOP.png
-│   ├── 🖼️ ESP32-BOBOARD-5V_BOTTOM.png
-│   └── 📄 ESP32-BOBOARD-5V.step   # Modello 3D
+│   └── 🖼️ ESP32-BOBOARD-5V_BOTTOM.png
+├── 📁 images/
+│   ├── 📄 ESP32-BOBOARD-5V.step   # Modello 3D (output_job.sh)
+│   └── 📄 ESP32-BOBOARD-5V.wrl    # Modello VRML (output_job.sh)
 ├── 📁 production/
 │   ├── 📄 *.gbl, *.gtl           # File Gerber
 │   ├── 📄 *.drl                  # File drill
