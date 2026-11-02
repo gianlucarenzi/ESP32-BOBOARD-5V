@@ -80,9 +80,11 @@ def draw(title, subtitle, connectors, links, notes, fname):
     # An even pin's wire leaves sideways by half a column, so its vertical
     # run passes between the odd pins of the lower row.
     o.append(f'<rect x="{X0+14}" y="{HDR_Y}" width="{32*PJ-24}" height="50" rx="2" fill="#2b2b2b"/>')
-    o.append(f'<text x="{X0+60}" y="{BOARD_Y+76}" font-size="11" fill="#d8f0d8">'
-             f'<tspan font-weight="bold" fill="#ffffff">J3</tspan> 2x16: odd pins lower row '
-             f'(pin 1 left), even pins upper row</text>')
+    # J3 caption on the free board area right of the module
+    for k, line in enumerate(('<tspan font-weight="bold" fill="#ffffff">J3</tspan> 2x16 header',
+                              'odd pins: lower row, pin 1 on the left',
+                              'even pins: upper row')):
+        o.append(f'<text x="{mx+330}" y="{BOARD_Y+36+16*k}" font-size="11" fill="#d8f0d8">{line}</text>')
     jx = {}
     jexit = {}
     used = {l[0] for l in links}
