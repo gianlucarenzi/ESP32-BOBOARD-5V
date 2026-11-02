@@ -7,6 +7,7 @@
 - The four demo builds are replaced by one **`sid-demo`**: the tune needs no driver on the computer, so the demo does not start the bus loop at all (every bus pin an input, nothing ever driven).  Plugged into an Atari and powered on, the sound comes out mixed with POKEY; on a C64, DAC1 goes to an external amplifier / mixer (no audio on the expansion port).
 - Five environments: `sid-atari-cctl`, `sid-atari-pbi`, `sid-c64-io1`, `sid-c64-io2`, `sid-demo`.
 - README, Audio Circuit: new **Amplifier** section for the C64 builds and `sid-demo`: line-level network (C1 10 µF, R1 4.7 kΩ / R2 2.2 kΩ to about 1 Vpp, C2 47 nF, corner about 2.3 kHz; the 100 kΩ ECI filter would be loaded down by a 10-50 kΩ input), powered speakers / LINE IN, LM386 or PAM8403 modules on 5 V with a common ground, or the C64 A/V socket pin 5 (SID EXT IN) through 1 µF.
+- `docs/audio_breadboard.py`: Fritzing-style breadboard views of the audio wiring, `audio_breadboard_atari.svg` (C1 10 µF, R1 100 kΩ, C2 10 nF to ECI 5 AUDIO IN, GND to ECI H) and `audio_breadboard_c64.svg` (line-level network plus C3 1 µF to the A/V socket pin 5 AUDIO IN = SID EXT IN, GND to pin 2), both in the README.
 
 ## 2026-11-02: Commodore 64 Builds, /IO1 or /IO2 Block
 
