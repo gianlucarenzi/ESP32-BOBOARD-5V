@@ -264,6 +264,11 @@ else
 	fi
 fi
 
+# BOM interattiva (plugin InteractiveHtmlBom) dal PCB come salvato, con le
+# impostazioni di ibom.config.ini (prima andava generata a mano da pcbnew)
+echo "Creating the interactive BOM (ibom/ibom.html)"
+./run_pcbnew.sh generate_ibom.py ${PCBNAME}.kicad_pcb || { echo "Error on creating the interactive BOM."; exit 1; }
+
 echo "Creating PDF..."
 # Help eeplot locate KiCad 5 symbol libraries
 export KICAD_SYMBOL_DIR="${KILIBPATH}:${KICAD5_SYMBOLS}"
